@@ -15,6 +15,7 @@
 #include "platform/wii/WiiInputManager.hpp"
 #include "platform/wii/WiiRenderManager2D.hpp"
 #include "platform/wii/WiiRenderManager3D.hpp"
+#include "platform/wii/WiiSceneBootstrap.hpp"
 #include "runtime/native_exceptions.hpp"
 #endif
 
@@ -176,8 +177,14 @@ namespace helengine::wii {
                 return false;
             }
 
-            options->ContentRootPath = ".";
-            options->SceneCatalog = nullptr;
+            initializationStage = "ResolveSceneBootstrap";
+            SetBootPhase(WiiBootPhase::SceneBootstrap, GXColor { 0x40, 0x80, 0xFF, 0xFF });
+            const std::string contentRootPath = WiiSceneBootstrap::GetValidatedContentRootPath();
+            const std::string startupSceneId = WiiSceneBootstrap::GetStartupSceneId();
+            SYS_Report("[Wii] Staged content root: %s\n", contentRootPath.c_str());
+            SYS_Report("[Wii] Startup scene id: %s\n", startupSceneId.c_str());
+            options->ContentRootPath = contentRootPath;
+            options->SceneCatalog = WiiSceneBootstrap::CreateSceneCatalog();
             options->UpdateOrderLayers = 4;
             options->RenderOrderLayers3D = 4;
             options->UpdateListInitialCapacity = 64;

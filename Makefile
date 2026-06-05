@@ -58,7 +58,8 @@ endif
 GENERATED_BRIDGE_SOURCES := \
 	$(SOURCE_DIR)/platform/wii/WiiInputManager.cpp \
 	$(SOURCE_DIR)/platform/wii/WiiRenderManager2D.cpp \
-	$(SOURCE_DIR)/platform/wii/WiiRenderManager3D.cpp
+	$(SOURCE_DIR)/platform/wii/WiiRenderManager3D.cpp \
+	$(SOURCE_DIR)/platform/wii/WiiSceneBootstrap.cpp
 CPPFLAGS += -DHELENGINE_WII_HAS_GENERATED_CORE=1 -I$(HELENGINE_CORE_CPP_ROOT)
 endif
 

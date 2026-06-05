@@ -12,6 +12,9 @@ namespace helengine::wii {
         /// Core initialization options are being read and configured.
         CoreOptions,
 
+        /// Authored-scene bootstrap data is being resolved and validated.
+        SceneBootstrap,
+
         /// Wii bridge services are being constructed.
         BridgeConstruction,
 
