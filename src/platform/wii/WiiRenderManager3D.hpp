@@ -2,8 +2,8 @@
 
 #include "RenderManager3D.hpp"
 
+class ContentManager;
 class ModelAsset;
-class PlatformMaterialAsset;
 class RendererBackendCapabilityProfile;
 class RuntimeMaterial;
 class RuntimeModel;
@@ -21,10 +21,7 @@ namespace helengine::wii {
         ~WiiRenderManager3D() override;
 
         /// Fails because material creation is outside the generated-core boot slice.
-        RuntimeMaterial* BuildMaterialFromCooked(PlatformMaterialAsset* materialAsset) override;
-
-        /// Fails because cooked material loading is outside the generated-core boot slice.
-        RuntimeMaterial* BuildMaterialFromCooked(std::string cookedAssetPath) override;
+        RuntimeMaterial* BuildMaterialFromRawAsset(ContentManager* assetContentManager, std::string contentRootPath, std::string materialAssetPath) override;
 
         /// Fails because raw model creation is outside the generated-core boot slice.
         RuntimeModel* BuildModelFromRaw(ModelAsset* data) override;

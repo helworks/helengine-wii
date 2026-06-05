@@ -8,7 +8,7 @@ namespace helengine::wii {
     /// Creates the Wii 3D render bridge.
     WiiRenderManager3D::WiiRenderManager3D()
         : RenderManager3D()
-        , CapabilityProfile(new RendererBackendCapabilityProfile())
+        , CapabilityProfile(new RendererBackendCapabilityProfile(true, false, false, false, 0, 0))
         , OverlayRenderManager2D(nullptr) {
     }
 
@@ -18,21 +18,20 @@ namespace helengine::wii {
     }
 
     /// Fails because material creation is outside the generated-core boot slice.
-    RuntimeMaterial* WiiRenderManager3D::BuildMaterialFromCooked(PlatformMaterialAsset* materialAsset) {
-        if (materialAsset == nullptr) {
-            throw new ArgumentNullException("materialAsset");
+    RuntimeMaterial* WiiRenderManager3D::BuildMaterialFromRawAsset(ContentManager* assetContentManager, std::string contentRootPath, std::string materialAssetPath) {
+        if (assetContentManager == nullptr) {
+            throw new ArgumentNullException("assetContentManager");
+        }
+
+        if (contentRootPath.empty()) {
+            throw new ArgumentException("Wii content root path is required.", "contentRootPath");
+        }
+
+        if (materialAssetPath.empty()) {
+            throw new ArgumentException("Wii material asset path is required.", "materialAssetPath");
         }
 
         throw new InvalidOperationException("Wii generated-core boot does not support material creation yet.");
-    }
-
-    /// Fails because cooked material loading is outside the generated-core boot slice.
-    RuntimeMaterial* WiiRenderManager3D::BuildMaterialFromCooked(std::string cookedAssetPath) {
-        if (cookedAssetPath.empty()) {
-            throw new ArgumentException("Wii cooked material path is required.", "cookedAssetPath");
-        }
-
-        throw new InvalidOperationException("Wii generated-core boot does not support cooked material loading yet.");
     }
 
     /// Fails because raw model creation is outside the generated-core boot slice.

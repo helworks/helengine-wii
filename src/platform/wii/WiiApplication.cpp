@@ -3,22 +3,26 @@
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
+#include <exception>
 #include <malloc.h>
+
+#include <ogc/system.h>
 
 #if HELENGINE_WII_HAS_GENERATED_CORE
 #include "Core.hpp"
 #include "CoreInitializationOptions.hpp"
-#include "Exception.hpp"
 #include "PlatformInfo.hpp"
 #include "platform/wii/WiiInputManager.hpp"
 #include "platform/wii/WiiRenderManager2D.hpp"
 #include "platform/wii/WiiRenderManager3D.hpp"
+#include "runtime/native_exceptions.hpp"
 #endif
 
 namespace helengine::wii {
     namespace {
         constexpr std::size_t DefaultFifoSize = 256 * 1024;
         constexpr GXColor PinkClearColor { 0xFF, 0x69, 0xB4, 0xFF };
+        constexpr GXColor FailureClearColor { 0xFF, 0x00, 0x00, 0xFF };
     }
 
     /// Creates the Wii application with no initialized native or engine state.
@@ -157,17 +161,157 @@ namespace helengine::wii {
 
     /// Initializes the generated engine core when generated sources are present in the build.
     bool WiiApplication::InitializeEngineCore() {
+#if HELENGINE_WII_HAS_GENERATED_CORE
+        const char* initializationStage = "BeforeCoreConstruction";
+        try {
+            initializationStage = "ConstructCore";
+            SetBootPhase(WiiBootPhase::CoreConstruction, GXColor { 0xFF, 0xFF, 0x00, 0xFF });
+            EngineCore = new Core();
+
+            initializationStage = "ReadInitializationOptions";
+            SetBootPhase(WiiBootPhase::CoreOptions, GXColor { 0xFF, 0x80, 0x00, 0xFF });
+            CoreInitializationOptions* options = EngineCore->get_InitializationOptions();
+            if (options == nullptr) {
+                FailBootPhase(WiiBootPhase::Failed, FailureClearColor);
+                return false;
+            }
+
+            options->ContentRootPath = ".";
+            options->SceneCatalog = nullptr;
+            options->UpdateOrderLayers = 4;
+            options->RenderOrderLayers3D = 4;
+            options->UpdateListInitialCapacity = 64;
+            options->RenderList2DInitialCapacity = 64;
+            options->RenderList3DInitialCapacity = 64;
+
+            initializationStage = "ConstructBridgeServices";
+            SetBootPhase(WiiBootPhase::BridgeConstruction, GXColor { 0x00, 0xFF, 0xFF, 0xFF });
+            EngineRenderManager3D = new WiiRenderManager3D();
+            EngineRenderManager2D = new WiiRenderManager2D();
+            EngineRenderManager3D->SetOverlayRenderManager2D(EngineRenderManager2D);
+            EngineInputManager = new WiiInputManager();
+            EnginePlatformInfo = new PlatformInfo("wii", "wii-headless");
+
+            initializationStage = "AddPrimaryWindow";
+            SetBootPhase(WiiBootPhase::CoreInitialization, GXColor { 0x00, 0x00, 0xFF, 0xFF });
+            EngineRenderManager3D->AddWindow(0, RenderMode->fbWidth, RenderMode->efbHeight);
+
+            initializationStage = "InitializeCore";
+            EngineCore->Initialize(EngineRenderManager3D, EngineRenderManager2D, EngineInputManager, EnginePlatformInfo, options);
+            SYS_Report("[Wii] Engine core initialized.\n");
+            EngineInitialized = true;
+            PresentedFrameCount = 0;
+            VerifiedFrameCount = 0;
+            UpdateCompletedSincePresent = false;
+            DrawCompletedSincePresent = false;
+            SetBootPhase(WiiBootPhase::Running, GXColor { 0x00, 0xFF, 0x00, 0xFF });
+            return true;
+        }
+        catch (const std::exception& exception) {
+            EngineInitialized = false;
+            FailBootPhase(WiiBootPhase::Failed, FailureClearColor);
+            SYS_Report("[Wii] Engine core initialization threw std::exception stage=%s message=%s\n", initializationStage, exception.what());
+            return false;
+        }
+        catch (Exception* exception) {
+            EngineInitialized = false;
+            FailBootPhase(WiiBootPhase::Failed, FailureClearColor);
+            SYS_Report("[Wii] Engine core initialization threw Exception stage=%s message=%s\n", initializationStage, exception != nullptr ? exception->what() : "<null>");
+            delete exception;
+            return false;
+        }
+        catch (...) {
+            EngineInitialized = false;
+            FailBootPhase(WiiBootPhase::Failed, FailureClearColor);
+            SYS_Report("[Wii] Engine core initialization threw stage=%s.\n", initializationStage);
+            return false;
+        }
+#else
         return true;
+#endif
     }
 
     /// Advances one engine frame when the generated core was initialized successfully.
     bool WiiApplication::UpdateEngineCore() {
+#if HELENGINE_WII_HAS_GENERATED_CORE
+        if (!EngineInitialized || EngineCore == nullptr || EngineRenderManager2D == nullptr) {
+            FailBootPhase(WiiBootPhase::Failed, FailureClearColor);
+            return false;
+        }
+
+        try {
+            SetBootPhase(WiiBootPhase::CoreUpdate, GXColor { 0x00, 0xA0, 0x00, 0xFF });
+            EngineRenderManager2D->BeginFrame();
+            EngineCore->Update();
+            EngineRenderManager2D->FlushReleasedTextures();
+            if (EngineRenderManager3D != nullptr) {
+                EngineRenderManager3D->FlushReleasedAssets();
+            }
+
+            UpdateCompletedSincePresent = true;
+            return true;
+        }
+        catch (Exception* exception) {
+            EngineInitialized = false;
+            FailBootPhase(WiiBootPhase::Failed, FailureClearColor);
+            SYS_Report("[Wii] Engine update threw Exception*: %s\n", exception != nullptr ? exception->what() : "<null>");
+            delete exception;
+            return false;
+        }
+        catch (const std::exception& exception) {
+            EngineInitialized = false;
+            FailBootPhase(WiiBootPhase::Failed, FailureClearColor);
+            SYS_Report("[Wii] Engine update threw std::exception: %s\n", exception.what());
+            return false;
+        }
+        catch (...) {
+            EngineInitialized = false;
+            FailBootPhase(WiiBootPhase::Failed, FailureClearColor);
+            SYS_Report("[Wii] Engine update threw.\n");
+            return false;
+        }
+#else
         return true;
+#endif
     }
 
     /// Draws one engine frame when the generated core was initialized successfully.
     bool WiiApplication::DrawEngineCore() {
+#if HELENGINE_WII_HAS_GENERATED_CORE
+        if (!EngineInitialized || EngineCore == nullptr || EngineRenderManager3D == nullptr || EngineRenderManager2D == nullptr) {
+            FailBootPhase(WiiBootPhase::Failed, FailureClearColor);
+            return false;
+        }
+
+        try {
+            SetBootPhase(WiiBootPhase::CoreDraw, GXColor { 0x00, 0x60, 0x00, 0xFF });
+            EngineCore->Draw();
+            DrawCompletedSincePresent = true;
+            VerifiedFrameCount++;
+            return true;
+        }
+        catch (Exception* exception) {
+            EngineInitialized = false;
+            FailBootPhase(WiiBootPhase::Failed, FailureClearColor);
+            SYS_Report("[Wii] Engine draw threw Exception*: %s\n", exception != nullptr ? exception->what() : "<null>");
+            delete exception;
+            return false;
+        }
+        catch (const std::exception& exception) {
+            EngineInitialized = false;
+            FailBootPhase(WiiBootPhase::Failed, FailureClearColor);
+            SYS_Report("[Wii] Engine draw threw std::exception: %s\n", exception.what());
+            return false;
+        }
+        catch (...) {
+            EngineInitialized = false;
+            FailBootPhase(WiiBootPhase::Failed, FailureClearColor);
+            SYS_Report("[Wii] Engine draw threw.\n");
+            return false;
+        }
+#else
         return true;
+#endif
     }
 
     /// Presents one fallback or generated frame to the active framebuffer.
@@ -185,6 +329,26 @@ namespace helengine::wii {
 
     /// Resolves the currently visible diagnostic color for the next presented frame.
     GXColor WiiApplication::ResolvePresentedClearColor() {
+#if HELENGINE_WII_HAS_GENERATED_CORE
+        if (EngineInitialized) {
+            if (UpdateCompletedSincePresent && DrawCompletedSincePresent) {
+                UpdateCompletedSincePresent = false;
+                DrawCompletedSincePresent = false;
+                return GXColor { 0x00, 0x80, 0x80, 0xFF };
+            }
+
+            if (UpdateCompletedSincePresent) {
+                UpdateCompletedSincePresent = false;
+                return GXColor { 0xC0, 0xC0, 0x00, 0xFF };
+            }
+
+            if (DrawCompletedSincePresent) {
+                DrawCompletedSincePresent = false;
+                return GXColor { 0x00, 0x60, 0xA0, 0xFF };
+            }
+        }
+#endif
+
         return ClearColor;
     }
 

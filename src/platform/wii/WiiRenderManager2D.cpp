@@ -2,9 +2,11 @@
 
 #include "CameraComponent.hpp"
 #include "Core.hpp"
+#include "Entity.hpp"
 #include "FontAsset.hpp"
 #include "ICamera.hpp"
 #include "IDrawable2D.hpp"
+#include "IRenderQueue2D.hpp"
 #include "ObjectManager.hpp"
 #include "runtime/native_cast.hpp"
 #include "runtime/native_exceptions.hpp"
