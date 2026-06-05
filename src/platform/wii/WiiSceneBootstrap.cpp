@@ -3,66 +3,42 @@
 #include "RuntimeSceneCatalog.hpp"
 #include "RuntimeSceneCatalogEntry.hpp"
 #include "runtime/array.hpp"
-#include "runtime/native_exceptions.hpp"
-#include "system/io/file.hpp"
-#include "system/io/path.hpp"
+
+#if HELENGINE_WII_HAS_RUNTIME_SCENE_MANIFEST
+#include <ogc/system.h>
+
+#include "runtime/wii_runtime_scene_manifest.hpp"
+#endif
 
 namespace helengine::wii {
-    std::string WiiSceneBootstrap::BundledContentRootPath = "tmp/city-demo-disc-main-menu-content";
-
-    std::string WiiSceneBootstrap::BundledContentRootWindowsHostPath = "C:/dev/helworks/helengine-wii/tmp/city-demo-disc-main-menu-content";
-
-    std::string WiiSceneBootstrap::BundledContentRootWslPath = "/mnt/c/dev/helworks/helengine-wii/tmp/city-demo-disc-main-menu-content";
-
-    std::string WiiSceneBootstrap::StartupSceneId = "Scenes/DemoDiscMainMenu.helen";
-
-    /// Returns the staged content root and fails if the bundle has not been prepared.
-    std::string WiiSceneBootstrap::GetValidatedContentRootPath() {
-        const std::string relativeRootPath = Path::GetFullPath(BundledContentRootPath);
-        if (HasRequiredFiles(relativeRootPath)) {
-            return relativeRootPath;
+    /// Creates the runtime scene catalog emitted by the Wii builder.
+    RuntimeSceneCatalog* WiiSceneBootstrap::CreatePackagedSceneCatalog() {
+#if HELENGINE_WII_HAS_RUNTIME_SCENE_MANIFEST
+        std::size_t entryCount = 0;
+        const HEWiiRuntimeSceneEntry* entries = he_get_runtime_wii_scene_entries(&entryCount);
+        SYS_Report("[Wii] Runtime manifest entry count: %u\n", static_cast<unsigned int>(entryCount));
+        Array<RuntimeSceneCatalogEntry*>* runtimeEntries = new Array<RuntimeSceneCatalogEntry*>(static_cast<int32_t>(entryCount));
+        for (std::size_t index = 0; index < entryCount; index++) {
+            SYS_Report(
+                "[Wii] Runtime manifest entry[%u] scene=%s path=%s\n",
+                static_cast<unsigned int>(index),
+                entries[index].SceneId,
+                entries[index].CookedRelativePath);
+            (*runtimeEntries)[static_cast<int32_t>(index)] = new RuntimeSceneCatalogEntry(entries[index].SceneId, entries[index].CookedRelativePath);
         }
 
-        const std::string windowsHostRootPath = Path::GetFullPath(BundledContentRootWindowsHostPath);
-        if (HasRequiredFiles(windowsHostRootPath)) {
-            return windowsHostRootPath;
-        }
-
-        const std::string wslRootPath = Path::GetFullPath(BundledContentRootWslPath);
-        if (HasRequiredFiles(wslRootPath)) {
-            return wslRootPath;
-        }
-
-        ValidateRequiredFile(relativeRootPath, "cooked/scenes/DemoDiscMainMenu.hasset");
-        return relativeRootPath;
+        return new RuntimeSceneCatalog(runtimeEntries);
+#else
+        return nullptr;
+#endif
     }
 
-    /// Creates the single-scene runtime catalog used by the current Wii authored-scene bootstrap milestone.
-    RuntimeSceneCatalog* WiiSceneBootstrap::CreateSceneCatalog() {
-        Array<RuntimeSceneCatalogEntry*>* entries = new Array<RuntimeSceneCatalogEntry*>(1);
-        (*entries)[0] = new RuntimeSceneCatalogEntry(StartupSceneId, "cooked/scenes/DemoDiscMainMenu.hasset");
-        return new RuntimeSceneCatalog(entries);
-    }
-
-    /// Returns the authored startup scene id used by the staged runtime scene catalog.
-    std::string WiiSceneBootstrap::GetStartupSceneId() {
-        return StartupSceneId;
-    }
-
-    /// Returns whether all required staged files exist under the candidate content root.
-    bool WiiSceneBootstrap::HasRequiredFiles(std::string rootPath) {
-        if (String::IsNullOrWhiteSpace(rootPath)) {
-            return false;
-        }
-
-        return File::Exists(Path::GetFullPath(Path::Combine(rootPath, "cooked/scenes/DemoDiscMainMenu.hasset")));
-    }
-
-    /// Verifies one required staged content file exists under the bundle root.
-    void WiiSceneBootstrap::ValidateRequiredFile(std::string rootPath, std::string relativePath) {
-        const std::string fullPath = Path::GetFullPath(Path::Combine(rootPath, relativePath));
-        if (!File::Exists(fullPath)) {
-            throw new InvalidOperationException(std::string("Required staged Wii content file is missing: ") + fullPath);
-        }
+    /// Returns the startup scene id emitted by the Wii builder.
+    std::string WiiSceneBootstrap::GetPackagedStartupSceneId() {
+#if HELENGINE_WII_HAS_RUNTIME_SCENE_MANIFEST
+        return he_get_runtime_wii_startup_scene_id();
+#else
+        return std::string();
+#endif
     }
 }

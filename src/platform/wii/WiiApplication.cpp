@@ -177,14 +177,16 @@ namespace helengine::wii {
                 return false;
             }
 
-            initializationStage = "ResolveSceneBootstrap";
+            initializationStage = "ConfigureSceneBootstrap";
             SetBootPhase(WiiBootPhase::SceneBootstrap, GXColor { 0x40, 0x80, 0xFF, 0xFF });
-            const std::string contentRootPath = WiiSceneBootstrap::GetValidatedContentRootPath();
-            const std::string startupSceneId = WiiSceneBootstrap::GetStartupSceneId();
-            SYS_Report("[Wii] Staged content root: %s\n", contentRootPath.c_str());
-            SYS_Report("[Wii] Startup scene id: %s\n", startupSceneId.c_str());
-            options->ContentRootPath = contentRootPath;
-            options->SceneCatalog = WiiSceneBootstrap::CreateSceneCatalog();
+            options->ContentRootPath = ".";
+#if HELENGINE_WII_HAS_RUNTIME_SCENE_MANIFEST
+            options->SceneCatalog = WiiSceneBootstrap::CreatePackagedSceneCatalog();
+            const std::string packagedStartupSceneId = WiiSceneBootstrap::GetPackagedStartupSceneId();
+            SYS_Report("[Wii] Runtime startup scene id: %s\n", packagedStartupSceneId.c_str());
+#else
+            options->SceneCatalog = nullptr;
+#endif
             options->UpdateOrderLayers = 4;
             options->RenderOrderLayers3D = 4;
             options->UpdateListInitialCapacity = 64;
