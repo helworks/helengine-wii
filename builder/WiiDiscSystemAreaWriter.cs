@@ -38,6 +38,11 @@ public sealed class WiiDiscSystemAreaWriter {
     const uint SingleDiscCount = 1U;
 
     /// <summary>
+    /// Default MEM1 arena-high value seeded by Dolphin's Wii BS2 emulation before apploader handoff.
+    /// </summary>
+    const uint DefaultArenaHighAddress = 0x817FEC60U;
+
+    /// <summary>
     /// Enables long filenames in the extracted-partition system metadata.
     /// </summary>
     const uint LongFileNameSupportEnabled = 1U;
@@ -98,11 +103,23 @@ public sealed class WiiDiscSystemAreaWriter {
         string mainDolPath = Path.Combine(sysRootPath, "main.dol");
         string apploaderOutputPath = Path.Combine(sysRootPath, "apploader.img");
         File.Copy(nativeExecutablePath, mainDolPath, true);
-        uint dolOffsetBytes = AlignToFourBytes(BootBinSize + Bi2BinSize + new FileInfo(nativeApploaderTemplatePath).Length);
-        byte[] apploaderImageBytes = GeneratedApploaderImageBuilder.Build(nativeApploaderTemplatePath, nativeExecutablePath, dolOffsetBytes);
+        uint apploaderImageSizeBytes = WiiGeneratedApploaderImageBuilder.CalculateImageSize(nativeApploaderTemplatePath);
+        uint dolOffsetBytes = AlignToFourBytes(BootBinSize + Bi2BinSize + apploaderImageSizeBytes);
+        uint fstSizeBytes = CalculateFileSystemTableSize(Path.Combine(discRootPath, "files"));
+        uint fstOffsetBytes = AlignToFourBytes(dolOffsetBytes + new FileInfo(mainDolPath).Length);
+        uint fstLoadAddressBytes = CalculateFstLoadAddress(fstSizeBytes);
+        byte[] apploaderImageBytes = GeneratedApploaderImageBuilder.Build(
+            nativeApploaderTemplatePath,
+            nativeExecutablePath,
+            dolOffsetBytes,
+            fstOffsetBytes,
+            fstSizeBytes,
+            fstLoadAddressBytes);
         File.WriteAllBytes(apploaderOutputPath, apploaderImageBytes);
         File.WriteAllBytes(Path.Combine(sysRootPath, "bi2.bin"), BuildBi2Bin(options));
-        File.WriteAllBytes(Path.Combine(sysRootPath, "boot.bin"), BuildBootBin(options, discRootPath, mainDolPath, (uint)apploaderImageBytes.Length));
+        File.WriteAllBytes(
+            Path.Combine(sysRootPath, "boot.bin"),
+            BuildBootBin(options, dolOffsetBytes, fstOffsetBytes, fstSizeBytes));
         File.WriteAllText(Path.Combine(discRootPath, "setup.txt"), BuildSetupContents(options));
     }
 
@@ -110,15 +127,15 @@ public sealed class WiiDiscSystemAreaWriter {
     /// Builds one synthetic Wii <c>boot.bin</c> header suitable for extracted-partition composition.
     /// </summary>
     /// <param name="options">Disc metadata to encode into the header.</param>
-    /// <param name="discRootPath">Extracted disc root whose staged payload defines the FST layout.</param>
-    /// <param name="mainDolPath">Staged Wii executable path under <c>sys/main.dol</c>.</param>
-    /// <param name="apploaderImageSizeBytes">Byte size of the staged Wii apploader image.</param>
+    /// <param name="dolOffsetBytes">Disc byte offset where <c>sys/main.dol</c> is staged.</param>
+    /// <param name="fstOffsetBytes">Disc byte offset where the packaged FST is staged.</param>
+    /// <param name="fstSizeBytes">Byte size of the packaged FST.</param>
     /// <returns>Binary <c>boot.bin</c> payload.</returns>
     static byte[] BuildBootBin(
         WiiDiscSystemAreaOptions options,
-        string discRootPath,
-        string mainDolPath,
-        uint apploaderImageSizeBytes) {
+        uint dolOffsetBytes,
+        uint fstOffsetBytes,
+        uint fstSizeBytes) {
         byte[] buffer = new byte[BootBinSize];
         string normalizedDiscId = NormalizeDiscId(options.DiscId);
         Encoding ascii = Encoding.ASCII;
@@ -130,9 +147,6 @@ public sealed class WiiDiscSystemAreaWriter {
         ascii.GetBytes(normalizedTitle, 0, normalizedTitle.Length, buffer, 0x20);
         Array.Clear(buffer, 0x20 + titleByteCount, 0x400 - (0x20 + titleByteCount));
 
-        uint dolOffsetBytes = AlignToFourBytes(BootBinSize + Bi2BinSize + apploaderImageSizeBytes);
-        uint fstSizeBytes = CalculateFileSystemTableSize(Path.Combine(discRootPath, "files"));
-        uint fstOffsetBytes = AlignToFourBytes(dolOffsetBytes + new FileInfo(mainDolPath).Length);
         BinaryPrimitives.WriteUInt32BigEndian(buffer.AsSpan(BootBinDolOffsetFieldOffset, sizeof(uint)), dolOffsetBytes);
         BinaryPrimitives.WriteUInt32BigEndian(buffer.AsSpan(BootBinFstOffsetFieldOffset, sizeof(uint)), fstOffsetBytes);
         BinaryPrimitives.WriteUInt32BigEndian(buffer.AsSpan(BootBinFstSizeFieldOffset, sizeof(uint)), fstSizeBytes);
@@ -177,6 +191,21 @@ public sealed class WiiDiscSystemAreaWriter {
         }
 
         return (uint)alignedValue;
+    }
+
+    /// <summary>
+    /// Calculates the MEM1 address where the packaged FST should be loaded before title startup.
+    /// </summary>
+    /// <param name="fstSizeBytes">Byte size of the staged FST.</param>
+    /// <returns>Thirty-two-byte-aligned destination address for the FST.</returns>
+    static uint CalculateFstLoadAddress(uint fstSizeBytes) {
+        if (fstSizeBytes == 0U) {
+            throw new ArgumentOutOfRangeException(nameof(fstSizeBytes), "FST size must be nonzero.");
+        } else if (fstSizeBytes >= DefaultArenaHighAddress) {
+            throw new InvalidOperationException("Generated Wii FST exceeded the available MEM1 startup arena.");
+        }
+
+        return (DefaultArenaHighAddress - fstSizeBytes) & ~0x1FU;
     }
 
     /// <summary>

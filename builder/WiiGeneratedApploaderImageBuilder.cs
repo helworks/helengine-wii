@@ -7,6 +7,21 @@ namespace helengine.wii.builder;
 /// </summary>
 public sealed class WiiGeneratedApploaderImageBuilder {
     /// <summary>
+    /// Byte size of the Wii apploader header that precedes the executable payload.
+    /// </summary>
+    public const int HeaderSize = 0x20;
+
+    /// <summary>
+    /// Fixed entry-point address of the generated project-owned Wii apploader payload.
+    /// </summary>
+    const uint EntryPointAddress = 0x81200000U;
+
+    /// <summary>
+    /// ASCII build date written into the generated Wii apploader header.
+    /// </summary>
+    const string ApploaderDate = "2026/06/08";
+
+    /// <summary>
     /// Number of load requests reserved by the native apploader template.
     /// </summary>
     public const int RequestCapacity = 32;
@@ -37,7 +52,22 @@ public sealed class WiiGeneratedApploaderImageBuilder {
     const int CurrentRequestIndexFieldOffset = 0x20;
 
     /// <summary>
-    /// Byte offset of the first load request inside the patchable apploader config block.
+    /// Byte offset of the FST load-address field inside the patchable apploader config block.
+    /// </summary>
+    const int FstLoadAddressFieldOffset = 0x24;
+
+    /// <summary>
+    /// Byte offset of the FST byte-size field inside the patchable apploader config block.
+    /// </summary>
+    const int FstSizeFieldOffset = 0x28;
+
+    /// <summary>
+    /// Byte offset of the FST disc-offset field inside the patchable apploader config block.
+    /// </summary>
+    const int FstDiscOffsetWordsFieldOffset = 0x2C;
+
+    /// <summary>
+    /// Byte offset of the first DOL load request inside the patchable apploader config block.
     /// </summary>
     const int RequestsFieldOffset = 0x30;
 
@@ -62,41 +92,77 @@ public sealed class WiiGeneratedApploaderImageBuilder {
     readonly WiiDolImageReader DolImageReader = new();
 
     /// <summary>
+    /// Calculates the final staged apploader image size from one raw native apploader payload template.
+    /// </summary>
+    /// <param name="apploaderTemplatePath">Raw native apploader payload template emitted beside the packaged-mode DOL.</param>
+    /// <returns>Final staged apploader image size including the Wii header.</returns>
+    public static uint CalculateImageSize(string apploaderTemplatePath) {
+        if (string.IsNullOrWhiteSpace(apploaderTemplatePath)) {
+            throw new ArgumentException("Apploader template path is required.", nameof(apploaderTemplatePath));
+        } else if (!File.Exists(apploaderTemplatePath)) {
+            throw new FileNotFoundException("Native Wii apploader template was not found.", apploaderTemplatePath);
+        }
+
+        long imageSize = new FileInfo(apploaderTemplatePath).Length + HeaderSize;
+        if (imageSize > uint.MaxValue) {
+            throw new InvalidOperationException("Generated Wii apploader image size exceeded the supported 32-bit range.");
+        }
+
+        return (uint)imageSize;
+    }
+
+    /// <summary>
     /// Builds one disc-specific apploader image from the generic native template and the packaged-mode DOL.
     /// </summary>
     /// <param name="apploaderTemplatePath">Generic native apploader template emitted beside the packaged-mode DOL.</param>
     /// <param name="nativeExecutablePath">Packaged-mode DOL path to load.</param>
     /// <param name="dolOffsetBytes">Disc byte offset where <c>sys/main.dol</c> will be staged.</param>
+    /// <param name="fstOffsetBytes">Disc byte offset where the packaged FST will be staged.</param>
+    /// <param name="fstSizeBytes">Byte size of the packaged FST.</param>
+    /// <param name="fstLoadAddressBytes">RAM address where the apploader should request the packaged FST.</param>
     /// <returns>Patched apploader image bytes ready to stage as <c>sys/apploader.img</c>.</returns>
-    public byte[] Build(string apploaderTemplatePath, string nativeExecutablePath, uint dolOffsetBytes) {
+    public byte[] Build(
+        string apploaderTemplatePath,
+        string nativeExecutablePath,
+        uint dolOffsetBytes,
+        uint fstOffsetBytes,
+        uint fstSizeBytes,
+        uint fstLoadAddressBytes) {
         if (string.IsNullOrWhiteSpace(apploaderTemplatePath)) {
             throw new ArgumentException("Apploader template path is required.", nameof(apploaderTemplatePath));
         } else if (!File.Exists(apploaderTemplatePath)) {
             throw new FileNotFoundException("Native Wii apploader template was not found.", apploaderTemplatePath);
         } else if (string.IsNullOrWhiteSpace(nativeExecutablePath)) {
             throw new ArgumentException("Native executable path is required.", nameof(nativeExecutablePath));
+        } else if ((fstOffsetBytes & 0x3U) != 0U) {
+            throw new InvalidOperationException("Generated Wii apploader FST offsets require four-byte alignment.");
+        } else if ((fstLoadAddressBytes & 0x1FU) != 0U) {
+            throw new InvalidOperationException("Generated Wii apploader FST load addresses require thirty-two-byte alignment.");
         }
 
-        byte[] apploaderBytes = File.ReadAllBytes(apploaderTemplatePath);
-        int configOffset = FindConfigOffset(apploaderBytes);
+        byte[] apploaderPayloadBytes = File.ReadAllBytes(apploaderTemplatePath);
+        int configOffset = FindConfigOffset(apploaderPayloadBytes);
         WiiDolImage dolImage = DolImageReader.Read(nativeExecutablePath);
         if (dolImage.LoadRequests.Count > RequestCapacity) {
             throw new InvalidOperationException($"The packaged Wii DOL exposes {dolImage.LoadRequests.Count} loadable sections, which exceeds the apploader template capacity of {RequestCapacity}.");
         }
 
-        BinaryPrimitives.WriteUInt32BigEndian(apploaderBytes.AsSpan(configOffset + RequestCountFieldOffset, sizeof(uint)), (uint)dolImage.LoadRequests.Count);
-        BinaryPrimitives.WriteUInt32BigEndian(apploaderBytes.AsSpan(configOffset + EntryPointFieldOffset, sizeof(uint)), dolImage.EntryPoint);
-        BinaryPrimitives.WriteUInt32BigEndian(apploaderBytes.AsSpan(configOffset + BssAddressFieldOffset, sizeof(uint)), dolImage.BssAddress);
-        BinaryPrimitives.WriteUInt32BigEndian(apploaderBytes.AsSpan(configOffset + BssSizeFieldOffset, sizeof(uint)), dolImage.BssSize);
-        BinaryPrimitives.WriteUInt32BigEndian(apploaderBytes.AsSpan(configOffset + CurrentRequestIndexFieldOffset, sizeof(uint)), 0U);
+        BinaryPrimitives.WriteUInt32BigEndian(apploaderPayloadBytes.AsSpan(configOffset + RequestCountFieldOffset, sizeof(uint)), (uint)dolImage.LoadRequests.Count);
+        BinaryPrimitives.WriteUInt32BigEndian(apploaderPayloadBytes.AsSpan(configOffset + EntryPointFieldOffset, sizeof(uint)), dolImage.EntryPoint);
+        BinaryPrimitives.WriteUInt32BigEndian(apploaderPayloadBytes.AsSpan(configOffset + BssAddressFieldOffset, sizeof(uint)), dolImage.BssAddress);
+        BinaryPrimitives.WriteUInt32BigEndian(apploaderPayloadBytes.AsSpan(configOffset + BssSizeFieldOffset, sizeof(uint)), dolImage.BssSize);
+        BinaryPrimitives.WriteUInt32BigEndian(apploaderPayloadBytes.AsSpan(configOffset + CurrentRequestIndexFieldOffset, sizeof(uint)), 0U);
+        BinaryPrimitives.WriteUInt32BigEndian(apploaderPayloadBytes.AsSpan(configOffset + FstLoadAddressFieldOffset, sizeof(uint)), fstLoadAddressBytes);
+        BinaryPrimitives.WriteUInt32BigEndian(apploaderPayloadBytes.AsSpan(configOffset + FstSizeFieldOffset, sizeof(uint)), fstSizeBytes);
+        BinaryPrimitives.WriteUInt32BigEndian(apploaderPayloadBytes.AsSpan(configOffset + FstDiscOffsetWordsFieldOffset, sizeof(uint)), fstOffsetBytes >> 2);
 
         int requestRegionSize = RequestCapacity * RequestRecordSize;
-        apploaderBytes.AsSpan(configOffset + RequestsFieldOffset, requestRegionSize).Clear();
+        apploaderPayloadBytes.AsSpan(configOffset + RequestsFieldOffset, requestRegionSize).Clear();
         for (int index = 0; index < dolImage.LoadRequests.Count; index++) {
-            PatchLoadRequest(apploaderBytes, configOffset, dolImage.LoadRequests[index], dolOffsetBytes, index);
+            PatchLoadRequest(apploaderPayloadBytes, configOffset, dolImage.LoadRequests[index], dolOffsetBytes, index);
         }
 
-        return apploaderBytes;
+        return BuildImageWithHeader(apploaderPayloadBytes);
     }
 
     /// <summary>
@@ -143,5 +209,24 @@ public sealed class WiiGeneratedApploaderImageBuilder {
         }
 
         throw new InvalidOperationException("The native Wii apploader template does not contain the expected patch marker.");
+    }
+
+    /// <summary>
+    /// Prepends one valid Wii apploader header to the patched native payload bytes.
+    /// </summary>
+    /// <param name="apploaderPayloadBytes">Patched native apploader payload bytes.</param>
+    /// <returns>Final staged Wii apploader image bytes.</returns>
+    static byte[] BuildImageWithHeader(byte[] apploaderPayloadBytes) {
+        if (apploaderPayloadBytes == null) {
+            throw new ArgumentNullException(nameof(apploaderPayloadBytes));
+        }
+
+        byte[] apploaderImageBytes = new byte[HeaderSize + apploaderPayloadBytes.Length];
+        System.Text.Encoding.ASCII.GetBytes(ApploaderDate, 0, ApploaderDate.Length, apploaderImageBytes, 0);
+        BinaryPrimitives.WriteUInt32BigEndian(apploaderImageBytes.AsSpan(0x10, sizeof(uint)), EntryPointAddress);
+        BinaryPrimitives.WriteUInt32BigEndian(apploaderImageBytes.AsSpan(0x14, sizeof(uint)), (uint)apploaderPayloadBytes.Length);
+        BinaryPrimitives.WriteUInt32BigEndian(apploaderImageBytes.AsSpan(0x18, sizeof(uint)), 0U);
+        apploaderPayloadBytes.CopyTo(apploaderImageBytes, HeaderSize);
+        return apploaderImageBytes;
     }
 }

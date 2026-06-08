@@ -29,6 +29,7 @@ APPLOADER_TEMPLATE := $(BUILD_DIR)/helengine_wii_apploader_template.bin
 CXX := $(DEVKITPPC)/bin/powerpc-eabi-g++
 ELF2DOL := $(DEVKITPRO)/tools/bin/elf2dol
 OBJCOPY := $(DEVKITPPC)/bin/powerpc-eabi-objcopy
+LD := $(DEVKITPPC)/bin/powerpc-eabi-ld
 
 CPPFLAGS := \
 	-I$(SOURCE_DIR) \
@@ -125,13 +126,9 @@ LDFLAGS := \
 	-Wl,--gc-sections
 
 APPLOADER_LDFLAGS := \
-	$(MACHDEP) \
-	-nostdlib \
-	-nodefaultlibs \
-	-nostartfiles \
-	-Wl,-T,$(APPLOADER_LINKER_SCRIPT) \
-	-Wl,-Map,$(BUILD_DIR)/helengine_wii_apploader.map \
-	-Wl,--gc-sections
+	-T $(APPLOADER_LINKER_SCRIPT) \
+	-Map $(BUILD_DIR)/helengine_wii_apploader.map \
+	--gc-sections
 
 LDLIBS := \
 	-lwiiuse \
@@ -158,7 +155,7 @@ $(APPLOADER_TEMPLATE): $(APPLOADER_ELF)
 
 $(APPLOADER_ELF): $(APPLOADER_OBJECT)
 	@mkdir -p $(dir $@)
-	$(CXX) $(APPLOADER_OBJECT) $(APPLOADER_LDFLAGS) -o $@
+	$(LD) $(APPLOADER_OBJECT) $(APPLOADER_LDFLAGS) -o $@
 
 $(BUILD_DIR)/%.o: $(SOURCE_DIR)/%.cpp
 	@mkdir -p $(dir $@)

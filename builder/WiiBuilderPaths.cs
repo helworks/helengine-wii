@@ -24,7 +24,11 @@ public sealed class WiiBuilderPaths {
         string repositoryRootPath = ResolveRepositoryRootPath();
         return new WiiBuilderPaths(
             repositoryRootPath,
-            request.GeneratedCoreCppRootPath);
+            request.GeneratedCoreCppRootPath,
+            Path.Combine(request.WorkingRoot, "staged-content"),
+            Path.Combine(request.OutputRoot, "disc"),
+            Path.Combine(request.OutputRoot, "game.iso"),
+            Path.Combine(request.OutputRoot, "native", "helengine_wii.dol"));
     }
 
     /// <summary>
@@ -80,15 +84,35 @@ public sealed class WiiBuilderPaths {
     /// </summary>
     /// <param name="repositoryRootPath">Repository root that contains the native Wii project files.</param>
     /// <param name="generatedCoreRootPath">Generated core root that receives runtime manifest files.</param>
+    /// <param name="stagingRootPath">Working staging root that receives cooked artifacts before disc layout.</param>
+    /// <param name="discRootPath">Extracted disc root written for inspection and image packaging.</param>
+    /// <param name="discImagePath">Final Wii disc-image output path.</param>
+    /// <param name="nativeExecutablePath">Packaged-mode native DOL output path staged by the builder.</param>
     public WiiBuilderPaths(
         string repositoryRootPath,
-        string generatedCoreRootPath) {
+        string generatedCoreRootPath,
+        string stagingRootPath,
+        string discRootPath,
+        string discImagePath,
+        string nativeExecutablePath) {
         RepositoryRootPath = string.IsNullOrWhiteSpace(repositoryRootPath)
             ? throw new ArgumentException("Repository root path is required.", nameof(repositoryRootPath))
             : repositoryRootPath;
         GeneratedCoreRootPath = string.IsNullOrWhiteSpace(generatedCoreRootPath)
             ? throw new ArgumentException("Generated core root path is required.", nameof(generatedCoreRootPath))
             : generatedCoreRootPath;
+        StagingRootPath = string.IsNullOrWhiteSpace(stagingRootPath)
+            ? throw new ArgumentException("Staging root path is required.", nameof(stagingRootPath))
+            : stagingRootPath;
+        DiscRootPath = string.IsNullOrWhiteSpace(discRootPath)
+            ? throw new ArgumentException("Disc root path is required.", nameof(discRootPath))
+            : discRootPath;
+        DiscImagePath = string.IsNullOrWhiteSpace(discImagePath)
+            ? throw new ArgumentException("Disc image path is required.", nameof(discImagePath))
+            : discImagePath;
+        NativeExecutablePath = string.IsNullOrWhiteSpace(nativeExecutablePath)
+            ? throw new ArgumentException("Native executable path is required.", nameof(nativeExecutablePath))
+            : nativeExecutablePath;
     }
 
     /// <summary>
@@ -100,6 +124,26 @@ public sealed class WiiBuilderPaths {
     /// Gets the generated core root that receives runtime manifest files.
     /// </summary>
     public string GeneratedCoreRootPath { get; }
+
+    /// <summary>
+    /// Gets the working staging root that receives cooked artifacts before disc layout.
+    /// </summary>
+    public string StagingRootPath { get; }
+
+    /// <summary>
+    /// Gets the extracted disc root written for inspection and image packaging.
+    /// </summary>
+    public string DiscRootPath { get; }
+
+    /// <summary>
+    /// Gets the final Wii disc-image output path.
+    /// </summary>
+    public string DiscImagePath { get; }
+
+    /// <summary>
+    /// Gets the packaged-mode native DOL output path staged by the builder.
+    /// </summary>
+    public string NativeExecutablePath { get; }
 
     /// <summary>
     /// Gets the generated-core root relative to the repository root for future Docker path mapping.

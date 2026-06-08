@@ -21,6 +21,9 @@ namespace helengine::wii {
         /// The generated core is receiving its initialization call.
         CoreInitialization,
 
+        /// The generated runtime scene is being queued for loading.
+        SceneLoad,
+
         /// The generated core has initialized and the runtime frame loop is active.
         Running,
 

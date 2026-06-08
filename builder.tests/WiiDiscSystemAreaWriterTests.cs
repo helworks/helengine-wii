@@ -7,9 +7,14 @@ namespace helengine.wii.builder.tests;
 /// </summary>
 public sealed class WiiDiscSystemAreaWriterTests {
     /// <summary>
-    /// Byte offset of the patchable apploader config block inside the fake native apploader template.
+    /// Byte offset of the patchable apploader config block inside the raw fake native apploader template payload.
     /// </summary>
-    const int TemplateConfigOffset = 0x40;
+    const int RawTemplateConfigOffset = 0x40;
+
+    /// <summary>
+    /// Byte offset of the patchable apploader config block inside the final staged apploader image.
+    /// </summary>
+    const int FinalImageConfigOffset = RawTemplateConfigOffset + WiiGeneratedApploaderImageBuilder.HeaderSize;
 
     /// <summary>
     /// Ensures the staged <c>boot.bin</c> preserves the supplied ID6 and Wii magic word.
@@ -98,7 +103,7 @@ public sealed class WiiDiscSystemAreaWriterTests {
 
             byte[] bootBytes = File.ReadAllBytes(Path.Combine(discRootPath, "sys", "boot.bin"));
 
-            uint expectedDolOffset = WiiDiscSystemAreaWriter.BootBinSize + WiiDiscSystemAreaWriter.Bi2BinSize + 0x200U;
+            uint expectedDolOffset = WiiDiscSystemAreaWriter.BootBinSize + WiiDiscSystemAreaWriter.Bi2BinSize + 0x220U;
             uint expectedFstSize = 100U;
             uint expectedFstOffset = expectedDolOffset + 0x1238U;
 
@@ -135,13 +140,20 @@ public sealed class WiiDiscSystemAreaWriterTests {
             writer.Write(discRootPath, nativeExecutablePath, new WiiDiscSystemAreaOptions("RCIE01", "city"));
 
             byte[] apploaderBytes = File.ReadAllBytes(Path.Combine(discRootPath, "sys", "apploader.img"));
-            Assert.Equal(1U, ReadBigEndianUInt32(apploaderBytes, TemplateConfigOffset + 0x10));
-            Assert.Equal(0x80004000U, ReadBigEndianUInt32(apploaderBytes, TemplateConfigOffset + 0x14));
-            Assert.Equal(0x80005000U, ReadBigEndianUInt32(apploaderBytes, TemplateConfigOffset + 0x18));
-            Assert.Equal(0x00000040U, ReadBigEndianUInt32(apploaderBytes, TemplateConfigOffset + 0x1C));
-            Assert.Equal(0x80004000U, ReadBigEndianUInt32(apploaderBytes, TemplateConfigOffset + 0x30));
-            Assert.Equal(0x00000020U, ReadBigEndianUInt32(apploaderBytes, TemplateConfigOffset + 0x34));
-            Assert.Equal(0x000009D0U, ReadBigEndianUInt32(apploaderBytes, TemplateConfigOffset + 0x38));
+            Assert.Equal("2026/06/08", System.Text.Encoding.ASCII.GetString(apploaderBytes, 0, 10));
+            Assert.Equal(0x81200020U, ReadBigEndianUInt32(apploaderBytes, 0x10));
+            Assert.Equal(0x00000200U, ReadBigEndianUInt32(apploaderBytes, 0x14));
+            Assert.Equal(0U, ReadBigEndianUInt32(apploaderBytes, 0x18));
+            Assert.Equal(1U, ReadBigEndianUInt32(apploaderBytes, FinalImageConfigOffset + 0x10));
+            Assert.Equal(0x80004000U, ReadBigEndianUInt32(apploaderBytes, FinalImageConfigOffset + 0x14));
+            Assert.Equal(0x80005000U, ReadBigEndianUInt32(apploaderBytes, FinalImageConfigOffset + 0x18));
+            Assert.Equal(0x00000040U, ReadBigEndianUInt32(apploaderBytes, FinalImageConfigOffset + 0x1C));
+            Assert.Equal(0x817FEC20U, ReadBigEndianUInt32(apploaderBytes, FinalImageConfigOffset + 0x24));
+            Assert.Equal(0x00000028U, ReadBigEndianUInt32(apploaderBytes, FinalImageConfigOffset + 0x28));
+            Assert.Equal(0x000009E0U, ReadBigEndianUInt32(apploaderBytes, FinalImageConfigOffset + 0x2C));
+            Assert.Equal(0x80004000U, ReadBigEndianUInt32(apploaderBytes, FinalImageConfigOffset + 0x30));
+            Assert.Equal(0x00000020U, ReadBigEndianUInt32(apploaderBytes, FinalImageConfigOffset + 0x34));
+            Assert.Equal(0x000009D8U, ReadBigEndianUInt32(apploaderBytes, FinalImageConfigOffset + 0x38));
         }
         finally {
             if (Directory.Exists(workingRootPath)) {
@@ -173,22 +185,22 @@ public sealed class WiiDiscSystemAreaWriterTests {
     /// <param name="length">Byte length of the fake native apploader template.</param>
     static void WriteFakeApploaderTemplate(string path, int length) {
         byte[] bytes = new byte[length];
-        bytes[TemplateConfigOffset + 0x00] = 0x48;
-        bytes[TemplateConfigOffset + 0x01] = 0x45;
-        bytes[TemplateConfigOffset + 0x02] = 0x4C;
-        bytes[TemplateConfigOffset + 0x03] = 0x41;
-        bytes[TemplateConfigOffset + 0x04] = 0x50;
-        bytes[TemplateConfigOffset + 0x05] = 0x50;
-        bytes[TemplateConfigOffset + 0x06] = 0x4C;
-        bytes[TemplateConfigOffset + 0x07] = 0x44;
-        bytes[TemplateConfigOffset + 0x08] = 0x30;
-        bytes[TemplateConfigOffset + 0x09] = 0x30;
-        bytes[TemplateConfigOffset + 0x0A] = 0x31;
-        bytes[TemplateConfigOffset + 0x0B] = 0x31;
-        bytes[TemplateConfigOffset + 0x0C] = 0xA5;
-        bytes[TemplateConfigOffset + 0x0D] = 0x5A;
-        bytes[TemplateConfigOffset + 0x0E] = 0xA5;
-        bytes[TemplateConfigOffset + 0x0F] = 0x5A;
+        bytes[RawTemplateConfigOffset + 0x00] = 0x48;
+        bytes[RawTemplateConfigOffset + 0x01] = 0x45;
+        bytes[RawTemplateConfigOffset + 0x02] = 0x4C;
+        bytes[RawTemplateConfigOffset + 0x03] = 0x41;
+        bytes[RawTemplateConfigOffset + 0x04] = 0x50;
+        bytes[RawTemplateConfigOffset + 0x05] = 0x50;
+        bytes[RawTemplateConfigOffset + 0x06] = 0x4C;
+        bytes[RawTemplateConfigOffset + 0x07] = 0x44;
+        bytes[RawTemplateConfigOffset + 0x08] = 0x30;
+        bytes[RawTemplateConfigOffset + 0x09] = 0x30;
+        bytes[RawTemplateConfigOffset + 0x0A] = 0x31;
+        bytes[RawTemplateConfigOffset + 0x0B] = 0x31;
+        bytes[RawTemplateConfigOffset + 0x0C] = 0xA5;
+        bytes[RawTemplateConfigOffset + 0x0D] = 0x5A;
+        bytes[RawTemplateConfigOffset + 0x0E] = 0xA5;
+        bytes[RawTemplateConfigOffset + 0x0F] = 0x5A;
         File.WriteAllBytes(path, bytes);
     }
 

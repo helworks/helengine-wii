@@ -1,17 +1,24 @@
 #include "platform/wii/WiiApplication.hpp"
 
+#include <cstdarg>
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <cstdio>
 #include <malloc.h>
 
+#include <ogc/dvd.h>
+#include <ogc/isfs.h>
 #include <ogc/system.h>
 
 #if HELENGINE_WII_HAS_GENERATED_CORE
 #include "Core.hpp"
 #include "CoreInitializationOptions.hpp"
 #include "PlatformInfo.hpp"
+#include "RuntimeSceneLoadService.hpp"
+#include "SceneManager.hpp"
+#include "SceneLoadMode.hpp"
 #include "platform/wii/WiiInputManager.hpp"
 #include "platform/wii/WiiRenderManager2D.hpp"
 #include "platform/wii/WiiRenderManager3D.hpp"
@@ -21,9 +28,160 @@
 
 namespace helengine::wii {
     namespace {
+        uint32_t UpdateFrameLogCount = 0U;
+        uint32_t DrawFrameLogCount = 0U;
+    }
+
+    namespace {
         constexpr std::size_t DefaultFifoSize = 256 * 1024;
         constexpr GXColor PinkClearColor { 0xFF, 0x69, 0xB4, 0xFF };
         constexpr GXColor FailureClearColor { 0xFF, 0x00, 0x00, 0xFF };
+        constexpr const char* RuntimeTracePaths[] = {
+            "sd:/runtime_registry_trace.txt",
+            "runtime_registry_trace.txt"
+        };
+        constexpr const char* BuildStamp = __DATE__ " " __TIME__;
+        bool RuntimeTraceIsfsInitializationAttempted = false;
+        bool RuntimeTraceIsfsAvailable = false;
+        char RuntimeTraceIsfsPath[144] {};
+
+        /// <summary>
+        /// Creates one host-readable per-title trace file path under the emulated Wii save-data tree.
+        /// </summary>
+        /// <param name="fileName">Trace file name to place under the title data directory.</param>
+        /// <param name="pathBuffer">Destination buffer that receives the resolved ISFS path.</param>
+        /// <param name="pathBufferLength">Capacity of <paramref name="pathBuffer"/> in bytes.</param>
+        /// <returns><see langword="true"/> when the current disc id was available and the path fit in the supplied buffer.</returns>
+        bool TryResolveTitleDataTracePath(const char* fileName, char* pathBuffer, std::size_t pathBufferLength) {
+            dvddiskid* diskId = DVD_GetCurrentDiskID();
+            if (diskId == nullptr) {
+                return false;
+            }
+
+            int writtenCharacterCount = std::snprintf(
+                pathBuffer,
+                pathBufferLength,
+                "/title/00010000/%02X%02X%02X%02X/data/%s",
+                static_cast<unsigned char>(diskId->gamename[0]),
+                static_cast<unsigned char>(diskId->gamename[1]),
+                static_cast<unsigned char>(diskId->gamename[2]),
+                static_cast<unsigned char>(diskId->gamename[3]),
+                fileName);
+            return writtenCharacterCount > 0 && static_cast<std::size_t>(writtenCharacterCount) < pathBufferLength;
+        }
+
+        /// <summary>
+        /// Creates the per-title save-data directory used for packaged-disc host-readable trace files.
+        /// </summary>
+        /// <param name="directoryPathBuffer">Destination buffer that receives the resolved <c>data</c> directory path.</param>
+        /// <param name="directoryPathBufferLength">Capacity of <paramref name="directoryPathBuffer"/> in bytes.</param>
+        /// <returns><see langword="true"/> when the per-title data directory path was resolved and created or already existed.</returns>
+        bool TryEnsureTitleDataTraceDirectory(char* directoryPathBuffer, std::size_t directoryPathBufferLength) {
+            dvddiskid* diskId = DVD_GetCurrentDiskID();
+            if (diskId == nullptr) {
+                return false;
+            }
+
+            char titleDirectoryPath[96];
+            int titleDirectoryCharacterCount = std::snprintf(
+                titleDirectoryPath,
+                sizeof(titleDirectoryPath),
+                "/title/00010000/%02X%02X%02X%02X",
+                static_cast<unsigned char>(diskId->gamename[0]),
+                static_cast<unsigned char>(diskId->gamename[1]),
+                static_cast<unsigned char>(diskId->gamename[2]),
+                static_cast<unsigned char>(diskId->gamename[3]));
+            if (titleDirectoryCharacterCount <= 0 || static_cast<std::size_t>(titleDirectoryCharacterCount) >= sizeof(titleDirectoryPath)) {
+                return false;
+            }
+
+            int dataDirectoryCharacterCount = std::snprintf(
+                directoryPathBuffer,
+                directoryPathBufferLength,
+                "%s/data",
+                titleDirectoryPath);
+            if (dataDirectoryCharacterCount <= 0 || static_cast<std::size_t>(dataDirectoryCharacterCount) >= directoryPathBufferLength) {
+                return false;
+            }
+
+            ISFS_CreateDir(titleDirectoryPath, 0, 3, 3, 3);
+            ISFS_CreateDir(directoryPathBuffer, 0, 3, 3, 3);
+            return true;
+        }
+
+        void InitializeRuntimeTraceIsfsPath() {
+            if (RuntimeTraceIsfsInitializationAttempted) {
+                return;
+            }
+
+            RuntimeTraceIsfsInitializationAttempted = true;
+            if (ISFS_Initialize() != ISFS_OK) {
+                return;
+            }
+
+            char traceDirectoryPath[112];
+            if (!TryEnsureTitleDataTraceDirectory(traceDirectoryPath, sizeof(traceDirectoryPath))
+                || !TryResolveTitleDataTracePath("runtime_registry_trace.txt", RuntimeTraceIsfsPath, sizeof(RuntimeTraceIsfsPath))) {
+                return;
+            }
+
+            s32 fileDescriptor = ISFS_Open(RuntimeTraceIsfsPath, ISFS_OPEN_RW);
+            if (fileDescriptor < 0) {
+                if (ISFS_CreateFile(RuntimeTraceIsfsPath, 0, 3, 3, 3) != ISFS_OK) {
+                    return;
+                }
+
+                fileDescriptor = ISFS_Open(RuntimeTraceIsfsPath, ISFS_OPEN_RW);
+                if (fileDescriptor < 0) {
+                    return;
+                }
+            }
+
+            ISFS_Close(fileDescriptor);
+            RuntimeTraceIsfsAvailable = true;
+        }
+
+        void AppendRuntimeTraceToIsfs(const char* text) {
+            InitializeRuntimeTraceIsfsPath();
+            if (!RuntimeTraceIsfsAvailable) {
+                return;
+            }
+
+            s32 fileDescriptor = ISFS_Open(RuntimeTraceIsfsPath, ISFS_OPEN_RW);
+            if (fileDescriptor < 0) {
+                RuntimeTraceIsfsAvailable = false;
+                return;
+            }
+
+            const std::size_t textLength = std::strlen(text);
+            if (textLength > 0) {
+                ISFS_Seek(fileDescriptor, 0, SEEK_END);
+                ISFS_Write(fileDescriptor, text, static_cast<u32>(textLength));
+            }
+
+            ISFS_Close(fileDescriptor);
+        }
+
+        void AppendRuntimeTrace(const char* format, ...) {
+            char buffer[2048];
+            va_list arguments;
+            va_start(arguments, format);
+            std::vsnprintf(buffer, sizeof(buffer), format, arguments);
+            va_end(arguments);
+
+            for (const char* runtimeTracePath : RuntimeTracePaths) {
+                std::FILE* file = std::fopen(runtimeTracePath, "ab");
+                if (file == nullptr) {
+                    continue;
+                }
+
+                std::fputs(buffer, file);
+                std::fflush(file);
+                std::fclose(file);
+            }
+
+            AppendRuntimeTraceToIsfs(buffer);
+        }
     }
 
     /// Creates the Wii application with no initialized native or engine state.
@@ -165,6 +323,8 @@ namespace helengine::wii {
 #if HELENGINE_WII_HAS_GENERATED_CORE
         const char* initializationStage = "BeforeCoreConstruction";
         try {
+            AppendRuntimeTrace("\n=== Wii runtime session %s ===\n", BuildStamp);
+            SYS_Report("[Wii] InitializeEngineCore begin.\n");
             initializationStage = "ConstructCore";
             SetBootPhase(WiiBootPhase::CoreConstruction, GXColor { 0xFF, 0xFF, 0x00, 0xFF });
             EngineCore = new Core();
@@ -179,13 +339,29 @@ namespace helengine::wii {
 
             initializationStage = "ConfigureSceneBootstrap";
             SetBootPhase(WiiBootPhase::SceneBootstrap, GXColor { 0x40, 0x80, 0xFF, 0xFF });
-            options->ContentRootPath = ".";
-#if HELENGINE_WII_HAS_RUNTIME_SCENE_MANIFEST
+#if HELENGINE_WII_PACKAGED_DISC_BOOT
+            if (!WiiSceneBootstrap::InitializePackagedStorage()) {
+                FailBootPhase(WiiBootPhase::SceneBootstrap, FailureClearColor);
+                SYS_Report("[Wii] Runtime content root initialization failed.\n");
+                return false;
+            }
+            const std::string packagedContentRootPath = WiiSceneBootstrap::GetPackagedContentRootPath();
+            SYS_Report("[Wii] Runtime content root: %s\n", packagedContentRootPath.c_str());
+            AppendRuntimeTrace("[WiiFile] Runtime content root: %s\n", packagedContentRootPath.c_str());
+            options->ContentRootPath = packagedContentRootPath;
             options->SceneCatalog = WiiSceneBootstrap::CreatePackagedSceneCatalog();
             const std::string packagedStartupSceneId = WiiSceneBootstrap::GetPackagedStartupSceneId();
             SYS_Report("[Wii] Runtime startup scene id: %s\n", packagedStartupSceneId.c_str());
+            AppendRuntimeTrace("[WiiFile] Runtime startup scene id: %s\n", packagedStartupSceneId.c_str());
 #else
-            options->SceneCatalog = nullptr;
+            const std::string contentRootPath = WiiSceneBootstrap::GetValidatedContentRootPath();
+            const std::string startupSceneId = WiiSceneBootstrap::GetStartupSceneId();
+            SYS_Report("[Wii] Staged content root: %s\n", contentRootPath.c_str());
+            AppendRuntimeTrace("[WiiFile] Staged content root: %s\n", contentRootPath.c_str());
+            SYS_Report("[Wii] Startup scene id: %s\n", startupSceneId.c_str());
+            AppendRuntimeTrace("[WiiFile] Startup scene id: %s\n", startupSceneId.c_str());
+            options->ContentRootPath = contentRootPath;
+            options->SceneCatalog = WiiSceneBootstrap::CreateSceneCatalog();
 #endif
             options->UpdateOrderLayers = 4;
             options->RenderOrderLayers3D = 4;
@@ -208,6 +384,50 @@ namespace helengine::wii {
             initializationStage = "InitializeCore";
             EngineCore->Initialize(EngineRenderManager3D, EngineRenderManager2D, EngineInputManager, EnginePlatformInfo, options);
             SYS_Report("[Wii] Engine core initialized.\n");
+            AppendRuntimeTrace("[WiiFile] Engine core initialized.\n");
+        }
+        catch (const std::exception& exception) {
+            EngineInitialized = false;
+            FailBootPhase(WiiBootPhase::Failed, FailureClearColor);
+            SYS_Report("[Wii] Engine core initialization threw std::exception stage=%s message=%s\n", initializationStage, exception.what());
+            AppendRuntimeTrace("[WiiFile] Engine core initialization threw std::exception stage=%s message=%s\n", initializationStage, exception.what());
+            return false;
+        }
+        catch (Exception* exception) {
+            EngineInitialized = false;
+            FailBootPhase(WiiBootPhase::Failed, FailureClearColor);
+            SYS_Report("[Wii] Engine core initialization threw Exception stage=%s message=%s\n", initializationStage, exception != nullptr ? exception->what() : "<null>");
+            AppendRuntimeTrace("[WiiFile] Engine core initialization threw Exception stage=%s message=%s\n", initializationStage, exception != nullptr ? exception->what() : "<null>");
+            delete exception;
+            return false;
+        }
+        catch (...) {
+            EngineInitialized = false;
+            FailBootPhase(WiiBootPhase::Failed, FailureClearColor);
+            SYS_Report("[Wii] Engine core initialization threw stage=%s.\n", initializationStage);
+            AppendRuntimeTrace("[WiiFile] Engine core initialization threw stage=%s.\n", initializationStage);
+            return false;
+        }
+
+        try {
+            SetBootPhase(WiiBootPhase::SceneLoad, GXColor { 0x80, 0xC0, 0x40, 0xFF });
+            if (EngineCore->get_SceneManager() == nullptr) {
+#if HELENGINE_WII_PACKAGED_DISC_BOOT
+                throw std::runtime_error("Manifest-backed Wii boot requires a runtime scene manager.");
+#else
+                throw std::runtime_error("Direct-DOL Wii boot requires a runtime scene manager.");
+#endif
+            }
+
+#if HELENGINE_WII_PACKAGED_DISC_BOOT
+            const std::string packagedStartupSceneId = WiiSceneBootstrap::GetPackagedStartupSceneId();
+            EngineCore->get_SceneManager()->LoadScene(packagedStartupSceneId, SceneLoadMode::Single);
+#else
+            const std::string startupSceneId = WiiSceneBootstrap::GetStartupSceneId();
+            EngineCore->get_SceneManager()->LoadScene(startupSceneId, SceneLoadMode::Single);
+#endif
+            SYS_Report("[Wii] Runtime startup scene queued.\n");
+            AppendRuntimeTrace("[WiiFile] Runtime startup scene queued.\n");
             EngineInitialized = true;
             PresentedFrameCount = 0;
             VerifiedFrameCount = 0;
@@ -219,20 +439,23 @@ namespace helengine::wii {
         catch (const std::exception& exception) {
             EngineInitialized = false;
             FailBootPhase(WiiBootPhase::Failed, FailureClearColor);
-            SYS_Report("[Wii] Engine core initialization threw std::exception stage=%s message=%s\n", initializationStage, exception.what());
+            SYS_Report("[Wii] Engine scene bootstrap threw std::exception: %s\n", exception.what());
+            AppendRuntimeTrace("[WiiFile] Engine scene bootstrap threw std::exception: %s\n", exception.what());
             return false;
         }
         catch (Exception* exception) {
             EngineInitialized = false;
             FailBootPhase(WiiBootPhase::Failed, FailureClearColor);
-            SYS_Report("[Wii] Engine core initialization threw Exception stage=%s message=%s\n", initializationStage, exception != nullptr ? exception->what() : "<null>");
+            SYS_Report("[Wii] Engine scene bootstrap threw Exception*: %s\n", exception != nullptr ? exception->what() : "<null>");
+            AppendRuntimeTrace("[WiiFile] Engine scene bootstrap threw Exception*: %s\n", exception != nullptr ? exception->what() : "<null>");
             delete exception;
             return false;
         }
         catch (...) {
             EngineInitialized = false;
             FailBootPhase(WiiBootPhase::Failed, FailureClearColor);
-            SYS_Report("[Wii] Engine core initialization threw stage=%s.\n", initializationStage);
+            SYS_Report("[Wii] Engine scene bootstrap threw.\n");
+            AppendRuntimeTrace("[WiiFile] Engine scene bootstrap threw.\n");
             return false;
         }
 #else
@@ -250,12 +473,55 @@ namespace helengine::wii {
 
         try {
             SetBootPhase(WiiBootPhase::CoreUpdate, GXColor { 0x00, 0xA0, 0x00, 0xFF });
+            if (UpdateFrameLogCount < 8U) {
+                SYS_Report("[Wii] Engine update begin frame=%lu\n", static_cast<unsigned long>(UpdateFrameLogCount));
+            }
             EngineRenderManager2D->BeginFrame();
             EngineCore->Update();
+            if (UpdateFrameLogCount < 8U && EngineCore->get_SceneManager() != nullptr) {
+                SYS_Report(
+                    "[Wii] SceneManager trace stage=%s scene=%s loaded=%ld pending=%ld\n",
+                    EngineCore->get_SceneManager()->get_LastTraceStage().c_str(),
+                    EngineCore->get_SceneManager()->get_LastTraceSceneId().c_str(),
+                    static_cast<long>(EngineCore->get_SceneManager()->get_LastTraceLoadedSceneCount()),
+                    static_cast<long>(EngineCore->get_SceneManager()->get_LastTracePendingOperationCount()));
+                AppendRuntimeTrace(
+                    "[WiiFile] SceneManager trace stage=%s scene=%s loaded=%ld pending=%ld\n",
+                    EngineCore->get_SceneManager()->get_LastTraceStage().c_str(),
+                    EngineCore->get_SceneManager()->get_LastTraceSceneId().c_str(),
+                    static_cast<long>(EngineCore->get_SceneManager()->get_LastTraceLoadedSceneCount()),
+                    static_cast<long>(EngineCore->get_SceneManager()->get_LastTracePendingOperationCount()));
+            }
+
+            if (UpdateFrameLogCount < 8U && EngineCore->get_SceneLoadService() != nullptr) {
+                SYS_Report(
+                    "[Wii] SceneLoad trace stage=%s root=%ld depth=%ld component=%s textStage=%s textFont=%s texture=%s\n",
+                    EngineCore->get_SceneLoadService()->get_LastTraceStage().c_str(),
+                    static_cast<long>(EngineCore->get_SceneLoadService()->get_LastTraceRootEntityIndex()),
+                    static_cast<long>(EngineCore->get_SceneLoadService()->get_LastTraceEntityDepth()),
+                    EngineCore->get_SceneLoadService()->get_LastTraceComponentTypeId().c_str(),
+                    EngineCore->get_SceneLoadService()->get_LastTextLoadStage().c_str(),
+                    EngineCore->get_SceneLoadService()->get_LastTextFontRelativePath().c_str(),
+                    EngineCore->get_SceneLoadService()->get_LastTextureRelativePath().c_str());
+                AppendRuntimeTrace(
+                    "[WiiFile] SceneLoad trace stage=%s root=%ld depth=%ld component=%s textStage=%s textFont=%s texture=%s\n",
+                    EngineCore->get_SceneLoadService()->get_LastTraceStage().c_str(),
+                    static_cast<long>(EngineCore->get_SceneLoadService()->get_LastTraceRootEntityIndex()),
+                    static_cast<long>(EngineCore->get_SceneLoadService()->get_LastTraceEntityDepth()),
+                    EngineCore->get_SceneLoadService()->get_LastTraceComponentTypeId().c_str(),
+                    EngineCore->get_SceneLoadService()->get_LastTextLoadStage().c_str(),
+                    EngineCore->get_SceneLoadService()->get_LastTextFontRelativePath().c_str(),
+                    EngineCore->get_SceneLoadService()->get_LastTextureRelativePath().c_str());
+            }
             EngineRenderManager2D->FlushReleasedTextures();
             if (EngineRenderManager3D != nullptr) {
                 EngineRenderManager3D->FlushReleasedAssets();
             }
+
+            if (UpdateFrameLogCount < 8U) {
+                SYS_Report("[Wii] Engine update completed frame=%lu\n", static_cast<unsigned long>(UpdateFrameLogCount));
+            }
+            UpdateFrameLogCount++;
 
             UpdateCompletedSincePresent = true;
             return true;
@@ -264,6 +530,7 @@ namespace helengine::wii {
             EngineInitialized = false;
             FailBootPhase(WiiBootPhase::Failed, FailureClearColor);
             SYS_Report("[Wii] Engine update threw Exception*: %s\n", exception != nullptr ? exception->what() : "<null>");
+            AppendRuntimeTrace("[WiiFile] Engine update threw Exception*: %s\n", exception != nullptr ? exception->what() : "<null>");
             delete exception;
             return false;
         }
@@ -271,12 +538,14 @@ namespace helengine::wii {
             EngineInitialized = false;
             FailBootPhase(WiiBootPhase::Failed, FailureClearColor);
             SYS_Report("[Wii] Engine update threw std::exception: %s\n", exception.what());
+            AppendRuntimeTrace("[WiiFile] Engine update threw std::exception: %s\n", exception.what());
             return false;
         }
         catch (...) {
             EngineInitialized = false;
             FailBootPhase(WiiBootPhase::Failed, FailureClearColor);
             SYS_Report("[Wii] Engine update threw.\n");
+            AppendRuntimeTrace("[WiiFile] Engine update threw.\n");
             return false;
         }
 #else
@@ -294,7 +563,31 @@ namespace helengine::wii {
 
         try {
             SetBootPhase(WiiBootPhase::CoreDraw, GXColor { 0x00, 0x60, 0x00, 0xFF });
+            if (DrawFrameLogCount < 8U) {
+                SYS_Report("[Wii] Engine draw begin frame=%lu\n", static_cast<unsigned long>(DrawFrameLogCount));
+            }
             EngineCore->Draw();
+            EngineRenderManager2D->RenderCapturedText(
+                static_cast<uint16_t>(RenderMode->fbWidth),
+                static_cast<uint16_t>(RenderMode->efbHeight));
+            if (DrawFrameLogCount < 8U) {
+                SYS_Report(
+                    "[Wii] Render2D trace cameras=%ld drawables=%ld queuedText=%ld submittedGlyph=%s\n",
+                    static_cast<long>(EngineRenderManager2D->get_VisitedCameraCount()),
+                    static_cast<long>(EngineRenderManager2D->get_VisitedDrawableCount()),
+                    static_cast<long>(EngineRenderManager2D->get_QueuedTextCount()),
+                    EngineRenderManager2D->get_DidSubmitGlyph() ? "true" : "false");
+                AppendRuntimeTrace(
+                    "[WiiFile] Render2D trace cameras=%ld drawables=%ld queuedText=%ld submittedGlyph=%s\n",
+                    static_cast<long>(EngineRenderManager2D->get_VisitedCameraCount()),
+                    static_cast<long>(EngineRenderManager2D->get_VisitedDrawableCount()),
+                    static_cast<long>(EngineRenderManager2D->get_QueuedTextCount()),
+                    EngineRenderManager2D->get_DidSubmitGlyph() ? "true" : "false");
+            }
+            if (DrawFrameLogCount < 8U) {
+                SYS_Report("[Wii] Engine draw completed frame=%lu\n", static_cast<unsigned long>(DrawFrameLogCount));
+            }
+            DrawFrameLogCount++;
             DrawCompletedSincePresent = true;
             VerifiedFrameCount++;
             return true;
@@ -303,6 +596,7 @@ namespace helengine::wii {
             EngineInitialized = false;
             FailBootPhase(WiiBootPhase::Failed, FailureClearColor);
             SYS_Report("[Wii] Engine draw threw Exception*: %s\n", exception != nullptr ? exception->what() : "<null>");
+            AppendRuntimeTrace("[WiiFile] Engine draw threw Exception*: %s\n", exception != nullptr ? exception->what() : "<null>");
             delete exception;
             return false;
         }
@@ -310,12 +604,14 @@ namespace helengine::wii {
             EngineInitialized = false;
             FailBootPhase(WiiBootPhase::Failed, FailureClearColor);
             SYS_Report("[Wii] Engine draw threw std::exception: %s\n", exception.what());
+            AppendRuntimeTrace("[WiiFile] Engine draw threw std::exception: %s\n", exception.what());
             return false;
         }
         catch (...) {
             EngineInitialized = false;
             FailBootPhase(WiiBootPhase::Failed, FailureClearColor);
             SYS_Report("[Wii] Engine draw threw.\n");
+            AppendRuntimeTrace("[WiiFile] Engine draw threw.\n");
             return false;
         }
 #else

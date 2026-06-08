@@ -3,7 +3,7 @@ ENTRY(ApploaderEntry)
 
 SECTIONS
 {
-    . = 0x81200020;
+    . = 0x81200000;
 
     .text : ALIGN(4)
     {
