@@ -189,9 +189,11 @@ public static class WiiBuildWorkspace {
             throw new ArgumentException("Staging root path must be provided.", nameof(stagingRootPath));
         }
 
-        if (platformCookWorkItems.Length > 0) {
-            throw new InvalidOperationException("Wii packaged builds do not support platform cook work items yet.");
+        if (platformCookWorkItems.Length == 0) {
+            return;
         }
+
+        new WiiPlatformCookWorkItemExecutor().Execute(platformCookWorkItems, Directory.GetCurrentDirectory(), stagingRootPath);
     }
 
     /// <summary>
@@ -208,6 +210,8 @@ public static class WiiBuildWorkspace {
             return;
         }
 
+        WiiTextureCooker textureCooker = new WiiTextureCooker();
+        WiiTextureCookSettings cookSettings = new WiiTextureCookSettings(0, TextureAssetColorFormat.GxRgb5A3.ToString(), TextureAssetAlphaPrecision.A8);
         string[] fontPaths = Directory.GetFiles(cookedFontsRootPath, "*.hefont", SearchOption.AllDirectories);
         for (int fontIndex = 0; fontIndex < fontPaths.Length; fontIndex++) {
             string fontPath = fontPaths[fontIndex];
@@ -217,7 +221,7 @@ public static class WiiBuildWorkspace {
             }
 
             string cookedAtlasTextureRelativePath = ResolveCookedAtlasTextureRelativePath(stagingRootPath, fontPath, fontAsset);
-            TextureAsset cookedAtlasTexture = CreateCookedAtlasTexture(fontAsset.SourceTextureAsset);
+            TextureAsset cookedAtlasTexture = textureCooker.CookTexture(fontAsset.SourceTextureAsset, cookSettings);
             WriteTextureAsset(Path.Combine(stagingRootPath, NormalizeRelativePath(cookedAtlasTextureRelativePath)), cookedAtlasTexture);
             fontAsset.CookedAtlasTextureRelativePath = cookedAtlasTextureRelativePath.Replace('\\', '/');
             fontAsset.SourceTextureAsset = null;
@@ -279,15 +283,9 @@ public static class WiiBuildWorkspace {
             throw new ArgumentNullException(nameof(sourceTextureAsset));
         }
 
-        return new TextureAsset {
-            Id = sourceTextureAsset.Id,
-            Width = sourceTextureAsset.Width,
-            Height = sourceTextureAsset.Height,
-            ColorFormat = sourceTextureAsset.ColorFormat,
-            AlphaPrecision = sourceTextureAsset.AlphaPrecision,
-            Colors = sourceTextureAsset.Colors ?? Array.Empty<byte>(),
-            PaletteColors = sourceTextureAsset.PaletteColors ?? Array.Empty<byte>()
-        };
+        return new WiiTextureCooker().CookTexture(
+            sourceTextureAsset,
+            new WiiTextureCookSettings(0, TextureAssetColorFormat.GxRgb5A3.ToString(), TextureAssetAlphaPrecision.A8));
     }
 
     /// <summary>

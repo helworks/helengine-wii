@@ -3,10 +3,15 @@
 #include <cstdio>
 #include <cstring>
 
-#include <fat.h>
 #include <ogc/dvd.h>
 #include <ogc/isfs.h>
 #include <ogc/system.h>
+
+static struct __argv NullSafeSystemArgv = {};
+
+extern "C" void __CheckARGV() {
+    __system_argv = &NullSafeSystemArgv;
+}
 
 namespace {
     /// <summary>
@@ -75,12 +80,11 @@ namespace {
 }
 
 int main() {
-    fatInitDefault();
-    if (std::FILE* mainEntryTraceFile = std::fopen("sd:/main_entry_trace.txt", "ab")) {
-        std::fputs("[Wii] main() entered.\n", mainEntryTraceFile);
-        std::fflush(mainEntryTraceFile);
-        std::fclose(mainEntryTraceFile);
-    }
+    SYS_STDIO_Report(true);
+    std::fprintf(stderr, "[Wii] stderr bridge armed.\n");
+    std::fflush(stderr);
+    SYS_Report("[Wii] main() entered.\n");
+    SYS_Report("[Wii] main() title-trace pre.\n");
 
     if (ISFS_Initialize() == ISFS_OK) {
         constexpr const char* MainEntryTraceText = "[Wii] main() entered.\n";
@@ -103,10 +107,9 @@ int main() {
         }
     }
 
-    SYS_STDIO_Report(true);
-    std::fprintf(stderr, "[Wii] stderr bridge armed.\n");
-    std::fflush(stderr);
-    SYS_Report("[Wii] main() entered.\n");
+    SYS_Report("[Wii] main() title-trace post.\n");
+    SYS_Report("[Wii] main() before application run.\n");
+
     helengine::wii::WiiApplication application;
     return application.Run();
 }

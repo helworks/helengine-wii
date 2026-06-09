@@ -1,6 +1,7 @@
 #include "platform/wii/WiiRenderManager2D.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <cmath>
 #include <vector>
 
@@ -10,15 +11,14 @@
 #include "Core.hpp"
 #include "Entity.hpp"
 #include "FontAsset.hpp"
-#include "FontInfo.hpp"
 #include "ICamera.hpp"
 #include "IDrawable2D.hpp"
 #include "ITextDrawable2D.hpp"
 #include "IRenderQueue2D.hpp"
 #include "ObjectManager.hpp"
-#include "SceneManager.hpp"
-#include "TextLayoutAlignmentUtils.hpp"
-#include "TextLayoutUtils.hpp"
+#include "RenderCommand2DType.hpp"
+#include "RenderCommandList2D.hpp"
+#include "RenderCommandListBuilder2D.hpp"
 #include "TextureAsset.hpp"
 #include "platform/wii/WiiRuntimeTexture.hpp"
 #include "runtime/native_cast.hpp"
@@ -116,132 +116,238 @@ namespace helengine::wii {
         DidSubmitGlyph = false;
     }
 
-    /// Renders all captured text draw requests through the Wii GX overlay path.
-    void WiiRenderManager2D::RenderCapturedText(uint16_t frameWidth, uint16_t frameHeight) {
-        ConfigureSolidColorPipeline(frameWidth, frameHeight);
-        if (VisitedCameraCount <= 0) {
-            DrawSolidQuad2D(8.0f, 8.0f, 24.0f, 24.0f, byte4 { 0xFF, 0x00, 0x00, 0xFF });
-        } else if (VisitedDrawableCount <= 0) {
-            DrawSolidQuad2D(8.0f, 8.0f, 24.0f, 24.0f, byte4 { 0xFF, 0x80, 0x00, 0xFF });
-        } else if (TextQueue.empty()) {
-            DrawSolidQuad2D(8.0f, 8.0f, 24.0f, 24.0f, byte4 { 0xFF, 0xE0, 0x00, 0xFF });
-        } else {
-            DrawSolidQuad2D(8.0f, 8.0f, 24.0f, 24.0f, byte4 { 0x00, 0xC0, 0x20, 0xFF });
-        }
+    /// Builds and executes the shared 2D command list for the current Wii frame.
+    void WiiRenderManager2D::RenderCapturedCommands(uint16_t logicalFrameWidth, uint16_t logicalFrameHeight, uint16_t physicalFrameWidth, uint16_t physicalFrameHeight) {
+        ConfigureSolidColorPipeline(logicalFrameWidth, logicalFrameHeight, physicalFrameWidth, physicalFrameHeight);
+        ResetClipRect(physicalFrameWidth, physicalFrameHeight);
 
-        if (TextQueue.empty()) {
+        Core* core = Core::get_Instance();
+        if (core == nullptr || core->get_ObjectManager() == nullptr) {
             return;
         }
 
-        ConfigureTextPipeline(frameWidth, frameHeight);
-        for (const WiiTextDrawCommand& command : TextQueue) {
-            ITextDrawable2D* drawable = command.Drawable;
-            if (drawable == nullptr || drawable->get_Parent() == nullptr || !drawable->get_Parent()->get_IsHierarchyEnabled()) {
+        RenderCommandListBuilder2D commandListBuilder {};
+        List<ICamera*>* cameras = core->get_ObjectManager()->get_Cameras();
+        for (int32_t cameraIndex = 0; cameraIndex < cameras->get_Count(); cameraIndex++) {
+            CameraComponent* camera = he_cpp_try_cast<CameraComponent>((*cameras)[cameraIndex]);
+            if (camera == nullptr || camera->get_Parent() == nullptr || !camera->get_Parent()->get_IsHierarchyEnabled()) {
                 continue;
             }
 
-            FontAsset* font = drawable->get_Font();
-            if (font == nullptr || font->get_Texture() == nullptr) {
-                continue;
-            } else if (font->get_FontInfo() == nullptr) {
-                throw new InvalidOperationException("Wii text rendering requires fonts with initialized FontInfo.");
-            } else if (font->get_Characters() == nullptr) {
-                throw new InvalidOperationException("Wii text rendering requires fonts with initialized glyph dictionaries.");
-            }
-
-            WiiRuntimeTexture* texture = static_cast<WiiRuntimeTexture*>(font->get_Texture());
-            if (texture == nullptr || !texture->HasNativeTextureObject()) {
+            RenderCommandList2D* commandList = commandListBuilder.Build(camera->get_RenderQueue2D());
+            if (commandList == nullptr || commandList->get_Count() <= 0) {
                 continue;
             }
 
-            std::string content = drawable->get_Text();
-            const double fontScale = std::max(static_cast<double>(drawable->get_FontScale()), 0.0001);
-            if (drawable->get_WrapText()) {
-                content = TextLayoutUtils::WrapText(
-                    content,
-                    font,
-                    std::max(1, static_cast<int32_t>(std::lround(drawable->get_Size().X / fontScale))));
-            }
+            ExecuteCommandList(commandList, logicalFrameWidth, logicalFrameHeight, physicalFrameWidth, physicalFrameHeight);
+        }
 
-            std::vector<double> lineOffsets;
-            std::size_t lineStartIndex = 0U;
-            for (std::size_t index = 0U; index <= content.size(); index++) {
-                if (index < content.size() && content[index] != '\n') {
-                    continue;
-                }
-
-                const std::string line = content.substr(lineStartIndex, index - lineStartIndex);
-                if (line.empty()) {
-                    lineOffsets.push_back(0.0);
-                    lineStartIndex = index + 1U;
-                    continue;
-                }
-
-                const double visibleWidth = TextLayoutAlignmentUtils::MeasureVisibleLineWidth(line, font, fontScale, texture->get_Width());
-                lineOffsets.push_back(TextLayoutAlignmentUtils::ResolveHorizontalOffset(drawable->get_Alignment(), drawable->get_Size().X, visibleWidth));
-                lineStartIndex = index + 1U;
-            }
-
-            if (lineOffsets.empty()) {
-                lineOffsets.push_back(0.0);
-            }
-
-            const auto position = drawable->get_Parent()->get_Position();
-            const double baseX = std::round(position.X);
-            const double baseY = std::round(position.Y);
-            const double lineHeight = std::max(static_cast<double>(font->get_LineHeight()) * fontScale, 1.0);
-            double offsetX = 0.0;
-            double offsetY = 0.0;
-            std::size_t lineIndex = 0U;
-            double lineOriginX = baseX + lineOffsets[lineIndex];
-
-            for (std::size_t index = 0U; index < content.size(); index++) {
-                const char character = content[index];
-                if (character == '\n') {
-                    offsetY += lineHeight;
-                    offsetX = 0.0;
-                    lineIndex++;
-                    lineOriginX = baseX + (lineIndex < lineOffsets.size() ? lineOffsets[lineIndex] : 0.0);
-                    continue;
-                }
-
-                if (character == ' ') {
-                    offsetX += font->get_FontInfo()->get_SpaceWidth() * fontScale;
-                    continue;
-                }
-
-                FontChar glyph;
-                if (!font->get_Characters()->TryGetValue(character, glyph)) {
-                    continue;
-                }
-
-                const double glyphWidth = glyph.SourceRect.Z * font->get_AtlasWidth() * fontScale;
-                const double glyphHeight = glyph.SourceRect.W * font->get_AtlasHeight() * fontScale;
-                const double snappedLineOffsetY = std::round(offsetY);
-                DrawTexturedQuad2D(
-                    static_cast<float>(lineOriginX + offsetX),
-                    static_cast<float>(baseY + snappedLineOffsetY + (glyph.OffsetY * fontScale)),
-                    static_cast<float>(glyphWidth),
-                    static_cast<float>(glyphHeight),
-                    glyph.SourceRect,
-                    drawable->get_Color(),
-                    texture);
-                DidSubmitGlyph = true;
-
-                const double advanceWidth = glyph.AdvanceWidth > 0.0f
-                    ? glyph.AdvanceWidth * fontScale
-                    : glyphWidth;
-                offsetX += advanceWidth;
-            }
+        if (HasCapturedDrawables()) {
+            ConfigureSolidColorPipeline(logicalFrameWidth, logicalFrameHeight, physicalFrameWidth, physicalFrameHeight);
+            DrawSolidQuad2D(8.0f, 8.0f, 24.0f, 24.0f, byte4 { 0x00, 0xC0, 0x20, 0xFF });
         }
 
         if (DidSubmitGlyph) {
-            ConfigureSolidColorPipeline(frameWidth, frameHeight);
+            ConfigureSolidColorPipeline(logicalFrameWidth, logicalFrameHeight, physicalFrameWidth, physicalFrameHeight);
             DrawSolidQuad2D(40.0f, 8.0f, 24.0f, 24.0f, byte4 { 0x00, 0x40, 0xFF, 0xFF });
-            ConfigureTextPipeline(frameWidth, frameHeight);
         }
 
-        GX_SetScissor(0, 0, frameWidth, frameHeight);
+        ResetClipRect(physicalFrameWidth, physicalFrameHeight);
+    }
+
+    /// Executes one shared 2D command list through the Wii GX overlay path.
+    void WiiRenderManager2D::ExecuteCommandList(RenderCommandList2D* commandList, uint16_t logicalFrameWidth, uint16_t logicalFrameHeight, uint16_t physicalFrameWidth, uint16_t physicalFrameHeight) {
+        if (commandList == nullptr) {
+            throw new ArgumentNullException("commandList");
+        }
+
+        std::vector<float4> clipRectStack;
+        bool texturedPipelineActive = false;
+        ConfigureSolidColorPipeline(logicalFrameWidth, logicalFrameHeight, physicalFrameWidth, physicalFrameHeight);
+        ResetClipRect(physicalFrameWidth, physicalFrameHeight);
+
+        for (int32_t commandIndex = 0; commandIndex < commandList->get_Count(); commandIndex++) {
+            switch (commandList->GetCommandType(commandIndex)) {
+                case RenderCommand2DType::ClipPush: {
+                    int32_t payloadIndex = commandList->GetClipPushPayloadIndex(commandIndex);
+                    float4 clipRect = commandList->GetClipPushRect(payloadIndex);
+                    clipRectStack.push_back(clipRect);
+                    ApplyClipRect(clipRect, logicalFrameWidth, logicalFrameHeight, physicalFrameWidth, physicalFrameHeight);
+                    break;
+                }
+                case RenderCommand2DType::ClipPop: {
+                    if (!clipRectStack.empty()) {
+                        clipRectStack.pop_back();
+                    }
+
+                    if (clipRectStack.empty()) {
+                        ResetClipRect(physicalFrameWidth, physicalFrameHeight);
+                    } else {
+                        ApplyClipRect(clipRectStack.back(), logicalFrameWidth, logicalFrameHeight, physicalFrameWidth, physicalFrameHeight);
+                    }
+                    break;
+                }
+                case RenderCommand2DType::TexturedQuad: {
+                    if (!texturedPipelineActive) {
+                        ConfigureTextPipeline(logicalFrameWidth, logicalFrameHeight, physicalFrameWidth, physicalFrameHeight);
+                        if (clipRectStack.empty()) {
+                            ResetClipRect(physicalFrameWidth, physicalFrameHeight);
+                        } else {
+                            ApplyClipRect(clipRectStack.back(), logicalFrameWidth, logicalFrameHeight, physicalFrameWidth, physicalFrameHeight);
+                        }
+
+                        texturedPipelineActive = true;
+                    }
+
+                    int32_t payloadIndex = commandList->GetTexturedQuadPayloadIndex(commandIndex);
+                    ExecuteTexturedQuadCommand(commandList, payloadIndex, logicalFrameWidth, logicalFrameHeight);
+                    break;
+                }
+                case RenderCommand2DType::GlyphQuad: {
+                    if (!texturedPipelineActive) {
+                        ConfigureTextPipeline(logicalFrameWidth, logicalFrameHeight, physicalFrameWidth, physicalFrameHeight);
+                        if (clipRectStack.empty()) {
+                            ResetClipRect(physicalFrameWidth, physicalFrameHeight);
+                        } else {
+                            ApplyClipRect(clipRectStack.back(), logicalFrameWidth, logicalFrameHeight, physicalFrameWidth, physicalFrameHeight);
+                        }
+
+                        texturedPipelineActive = true;
+                    }
+
+                    int32_t payloadIndex = commandList->GetGlyphQuadPayloadIndex(commandIndex);
+                    ExecuteGlyphQuadCommand(commandList, payloadIndex, logicalFrameWidth, logicalFrameHeight);
+                    break;
+                }
+                case RenderCommand2DType::RoundedRect: {
+                    if (texturedPipelineActive) {
+                        ConfigureSolidColorPipeline(logicalFrameWidth, logicalFrameHeight, physicalFrameWidth, physicalFrameHeight);
+                        if (clipRectStack.empty()) {
+                            ResetClipRect(physicalFrameWidth, physicalFrameHeight);
+                        } else {
+                            ApplyClipRect(clipRectStack.back(), logicalFrameWidth, logicalFrameHeight, physicalFrameWidth, physicalFrameHeight);
+                        }
+
+                        texturedPipelineActive = false;
+                    }
+
+                    int32_t payloadIndex = commandList->GetRoundedRectPayloadIndex(commandIndex);
+                    ExecuteRoundedRectCommand(commandList, payloadIndex, logicalFrameWidth, logicalFrameHeight);
+                    break;
+                }
+                default:
+                    throw new InvalidOperationException("Wii 2D rendering received an unsupported command type.");
+            }
+        }
+
+        ResetClipRect(physicalFrameWidth, physicalFrameHeight);
+    }
+
+    /// Executes one textured-quad command from the shared 2D command list.
+    void WiiRenderManager2D::ExecuteTexturedQuadCommand(RenderCommandList2D* commandList, int32_t payloadIndex, uint16_t logicalFrameWidth, uint16_t logicalFrameHeight) {
+        if (commandList == nullptr) {
+            throw new ArgumentNullException("commandList");
+        }
+
+        float4 bounds = commandList->GetTexturedQuadBounds(payloadIndex);
+        if (bounds.Z <= 0.0f || bounds.W <= 0.0f) {
+            return;
+        }
+
+        RuntimeTexture* runtimeTexture = commandList->GetTexturedQuadTexture(payloadIndex);
+        WiiRuntimeTexture* texture = static_cast<WiiRuntimeTexture*>(runtimeTexture);
+        if (texture == nullptr || !texture->HasNativeTextureObject()) {
+            return;
+        }
+
+        float4 sourceRect = commandList->GetTexturedQuadSourceRect(payloadIndex);
+        byte4 color = commandList->GetTexturedQuadColor(payloadIndex);
+        DrawTexturedQuad2D(bounds.X, bounds.Y, bounds.Z, bounds.W, sourceRect, color, texture);
+        static_cast<void>(logicalFrameWidth);
+        static_cast<void>(logicalFrameHeight);
+    }
+
+    /// Executes one glyph-quad command from the shared 2D command list.
+    void WiiRenderManager2D::ExecuteGlyphQuadCommand(RenderCommandList2D* commandList, int32_t payloadIndex, uint16_t logicalFrameWidth, uint16_t logicalFrameHeight) {
+        if (commandList == nullptr) {
+            throw new ArgumentNullException("commandList");
+        }
+
+        float4 bounds = commandList->GetGlyphQuadBounds(payloadIndex);
+        if (bounds.Z <= 0.0f || bounds.W <= 0.0f) {
+            return;
+        }
+
+        RuntimeTexture* runtimeTexture = commandList->GetGlyphQuadTexture(payloadIndex);
+        WiiRuntimeTexture* texture = static_cast<WiiRuntimeTexture*>(runtimeTexture);
+        if (texture == nullptr || !texture->HasNativeTextureObject()) {
+            return;
+        }
+
+        float4 sourceRect = commandList->GetGlyphQuadSourceRect(payloadIndex);
+        byte4 color = commandList->GetGlyphQuadColor(payloadIndex);
+        DrawTexturedQuad2D(bounds.X, bounds.Y, bounds.Z, bounds.W, sourceRect, color, texture);
+        DidSubmitGlyph = true;
+        static_cast<void>(logicalFrameWidth);
+        static_cast<void>(logicalFrameHeight);
+    }
+
+    /// Executes one rounded-rectangle command from the shared 2D command list.
+    void WiiRenderManager2D::ExecuteRoundedRectCommand(RenderCommandList2D* commandList, int32_t payloadIndex, uint16_t logicalFrameWidth, uint16_t logicalFrameHeight) {
+        if (commandList == nullptr) {
+            throw new ArgumentNullException("commandList");
+        }
+
+        float4 bounds = commandList->GetRoundedRectBounds(payloadIndex);
+        if (bounds.Z <= 0.0f || bounds.W <= 0.0f) {
+            return;
+        }
+
+        float radius = commandList->GetRoundedRectRadius(payloadIndex);
+        float borderThickness = std::max(0.0f, commandList->GetRoundedRectBorderThickness(payloadIndex));
+        RoundedRectCorners corners = commandList->GetRoundedRectCorners(payloadIndex);
+        byte4 fillColor = commandList->GetRoundedRectFillColor(payloadIndex);
+        byte4 borderColor = commandList->GetRoundedRectBorderColor(payloadIndex);
+        static_cast<void>(radius);
+        static_cast<void>(corners);
+        static_cast<void>(logicalFrameWidth);
+        static_cast<void>(logicalFrameHeight);
+
+        if (borderThickness > 0.0f && borderColor.W > 0U) {
+            DrawSolidQuad2D(bounds.X, bounds.Y, bounds.Z, bounds.W, borderColor);
+        }
+
+        float inset = std::min(borderThickness, std::min(bounds.Z * 0.5f, bounds.W * 0.5f));
+        float innerWidth = bounds.Z - (inset * 2.0f);
+        float innerHeight = bounds.W - (inset * 2.0f);
+        if (fillColor.W > 0U && innerWidth > 0.0f && innerHeight > 0.0f) {
+            DrawSolidQuad2D(bounds.X + inset, bounds.Y + inset, innerWidth, innerHeight, fillColor);
+        }
+    }
+
+    /// Applies one clip rectangle from the shared 2D command list to the active GX scissor state.
+    void WiiRenderManager2D::ApplyClipRect(const float4& clipRect, uint16_t logicalFrameWidth, uint16_t logicalFrameHeight, uint16_t physicalFrameWidth, uint16_t physicalFrameHeight) {
+        const float horizontalScale = static_cast<float>(physicalFrameWidth) / static_cast<float>(logicalFrameWidth);
+        const float verticalScale = static_cast<float>(physicalFrameHeight) / static_cast<float>(logicalFrameHeight);
+        float left = std::max(0.0f, clipRect.X);
+        float top = std::max(0.0f, clipRect.Y);
+        float right = std::min(static_cast<float>(logicalFrameWidth), clipRect.X + std::max(0.0f, clipRect.Z));
+        float bottom = std::min(static_cast<float>(logicalFrameHeight), clipRect.Y + std::max(0.0f, clipRect.W));
+        if (right <= left || bottom <= top) {
+            GX_SetScissor(0U, 0U, 0U, 0U);
+            return;
+        }
+
+        uint32_t x = static_cast<uint32_t>(std::floor(left * horizontalScale));
+        uint32_t y = static_cast<uint32_t>(std::floor(top * verticalScale));
+        uint32_t width = static_cast<uint32_t>(std::ceil(right * horizontalScale) - std::floor(left * horizontalScale));
+        uint32_t height = static_cast<uint32_t>(std::ceil(bottom * verticalScale) - std::floor(top * verticalScale));
+        GX_SetScissor(x, y, width, height);
+    }
+
+    /// Restores the active GX scissor state to the full frame bounds.
+    void WiiRenderManager2D::ResetClipRect(uint16_t physicalFrameWidth, uint16_t physicalFrameHeight) {
+        GX_SetScissor(0U, 0U, physicalFrameWidth, physicalFrameHeight);
     }
 
     /// Returns whether the current frame captured any 2D draw requests.
@@ -297,10 +403,10 @@ namespace helengine::wii {
     }
 
     /// Configures one native GX pass that draws solid diagnostics without texturing.
-    void WiiRenderManager2D::ConfigureSolidColorPipeline(uint16_t frameWidth, uint16_t frameHeight) {
+    void WiiRenderManager2D::ConfigureSolidColorPipeline(uint16_t logicalFrameWidth, uint16_t logicalFrameHeight, uint16_t physicalFrameWidth, uint16_t physicalFrameHeight) {
         Mtx44 projectionMatrix {};
         Mtx modelViewMatrix {};
-        guOrtho(projectionMatrix, 0.0f, static_cast<f32>(frameHeight), 0.0f, static_cast<f32>(frameWidth), 0.0f, 1.0f);
+        guOrtho(projectionMatrix, 0.0f, static_cast<f32>(logicalFrameHeight), 0.0f, static_cast<f32>(logicalFrameWidth), 0.0f, 1.0f);
         guMtxIdentity(modelViewMatrix);
 
         GX_LoadProjectionMtx(projectionMatrix, GX_ORTHOGRAPHIC);
@@ -324,7 +430,7 @@ namespace helengine::wii {
         GX_SetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_CLEAR);
         GX_SetColorUpdate(GX_TRUE);
         GX_SetAlphaUpdate(GX_TRUE);
-        GX_SetScissor(0, 0, frameWidth, frameHeight);
+        GX_SetScissor(0U, 0U, physicalFrameWidth, physicalFrameHeight);
     }
 
     /// Emits one solid screen-space quad in pixel coordinates for minimal runtime capture diagnostics.
@@ -342,10 +448,10 @@ namespace helengine::wii {
     }
 
     /// Configures the native GX state used by the Wii text overlay pass.
-    void WiiRenderManager2D::ConfigureTextPipeline(uint16_t frameWidth, uint16_t frameHeight) {
+    void WiiRenderManager2D::ConfigureTextPipeline(uint16_t logicalFrameWidth, uint16_t logicalFrameHeight, uint16_t physicalFrameWidth, uint16_t physicalFrameHeight) {
         Mtx44 projectionMatrix {};
         Mtx modelViewMatrix {};
-        guOrtho(projectionMatrix, 0.0f, static_cast<f32>(frameHeight), 0.0f, static_cast<f32>(frameWidth), 0.0f, 1.0f);
+        guOrtho(projectionMatrix, 0.0f, static_cast<f32>(logicalFrameHeight), 0.0f, static_cast<f32>(logicalFrameWidth), 0.0f, 1.0f);
         guMtxIdentity(modelViewMatrix);
 
         GX_LoadProjectionMtx(projectionMatrix, GX_ORTHOGRAPHIC);
@@ -372,7 +478,7 @@ namespace helengine::wii {
         GX_SetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_CLEAR);
         GX_SetColorUpdate(GX_TRUE);
         GX_SetAlphaUpdate(GX_TRUE);
-        GX_SetScissor(0, 0, frameWidth, frameHeight);
+        GX_SetScissor(0U, 0U, physicalFrameWidth, physicalFrameHeight);
     }
 
     /// Emits one textured screen-space quad in pixel coordinates for the active glyph pass.
@@ -381,20 +487,30 @@ namespace helengine::wii {
             throw new ArgumentNullException("texture");
         }
 
+        const float logicalWidth = static_cast<float>(std::max(1, texture->get_Width()));
+        const float logicalHeight = static_cast<float>(std::max(1, texture->get_Height()));
+        const float nativeWidth = static_cast<float>(std::max(1U, texture->GetNativeTextureWidth()));
+        const float nativeHeight = static_cast<float>(std::max(1U, texture->GetNativeTextureHeight()));
+        const float4 nativeSourceRect(
+            sourceRect.X * logicalWidth / nativeWidth,
+            sourceRect.Y * logicalHeight / nativeHeight,
+            sourceRect.Z * logicalWidth / nativeWidth,
+            sourceRect.W * logicalHeight / nativeHeight);
+
         GX_LoadTexObj(texture->GetNativeTextureObject(), GX_TEXMAP0);
         GX_Begin(GX_QUADS, GX_VTXFMT0, 4);
         GX_Position3f32(x, y, 0.0f);
         GX_Color4u8(color.X, color.Y, color.Z, color.W);
-        GX_TexCoord2f32(sourceRect.X, sourceRect.Y);
+        GX_TexCoord2f32(nativeSourceRect.X, nativeSourceRect.Y);
         GX_Position3f32(x + width, y, 0.0f);
         GX_Color4u8(color.X, color.Y, color.Z, color.W);
-        GX_TexCoord2f32(sourceRect.X + sourceRect.Z, sourceRect.Y);
+        GX_TexCoord2f32(nativeSourceRect.X + nativeSourceRect.Z, nativeSourceRect.Y);
         GX_Position3f32(x + width, y + height, 0.0f);
         GX_Color4u8(color.X, color.Y, color.Z, color.W);
-        GX_TexCoord2f32(sourceRect.X + sourceRect.Z, sourceRect.Y + sourceRect.W);
+        GX_TexCoord2f32(nativeSourceRect.X + nativeSourceRect.Z, nativeSourceRect.Y + nativeSourceRect.W);
         GX_Position3f32(x, y + height, 0.0f);
         GX_Color4u8(color.X, color.Y, color.Z, color.W);
-        GX_TexCoord2f32(sourceRect.X, sourceRect.Y + sourceRect.W);
+        GX_TexCoord2f32(nativeSourceRect.X, nativeSourceRect.Y + nativeSourceRect.W);
         GX_End();
     }
 }

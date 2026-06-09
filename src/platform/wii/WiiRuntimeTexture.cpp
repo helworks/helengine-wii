@@ -52,7 +52,9 @@ namespace helengine::wii {
         , NativeTextureData(nullptr)
         , NativeTextureDataSize(0U)
         , NativeTextureObject {}
-        , NativeTextureObjectInitialized(false) {
+        , NativeTextureObjectInitialized(false)
+        , NativeTextureWidth(0U)
+        , NativeTextureHeight(0U) {
     }
 
     /// Releases any owned native texture memory and GX texture state.
@@ -60,19 +62,20 @@ namespace helengine::wii {
         ResetNativeTextureData();
     }
 
-    /// Encodes one shared-engine texture asset into the first Wii texture format used by the menu text proof.
+    /// Loads one shared-engine texture asset into one Wii-native GX texture object.
     void WiiRuntimeTexture::LoadFromRaw(TextureAsset* data) {
         if (data == nullptr) {
             throw new ArgumentNullException("data");
-        } else if (data->Width == 0U || data->Height == 0U) {
-            throw new InvalidOperationException("Wii runtime textures require nonzero dimensions.");
-        } else if (data->Colors == nullptr) {
-            throw new InvalidOperationException("Wii runtime textures require RGBA32 color data.");
-        } else if (data->ColorFormat != TextureAssetColorFormat::Rgba32) {
-            throw new InvalidOperationException("Wii text proof-of-life currently supports only RGBA32 packaged font atlas textures.");
         }
 
         ResetNativeTextureData();
+        if (data->ColorFormat == TextureAssetColorFormat::GxRgb5A3) {
+            LoadPrepackedRgb5A3(data);
+            return;
+        } else if (data->ColorFormat != TextureAssetColorFormat::Rgba32) {
+            throw new InvalidOperationException("Wii runtime textures require either GxRgb5A3 or RGBA32 texture assets.");
+        }
+
         EncodeRgba32ToRgb5A3(data);
     }
 
@@ -90,6 +93,16 @@ namespace helengine::wii {
         return &NativeTextureObject;
     }
 
+    /// Returns the native GX texture width used by the uploaded texture object.
+    uint32_t WiiRuntimeTexture::GetNativeTextureWidth() const {
+        return NativeTextureWidth;
+    }
+
+    /// Returns the native GX texture height used by the uploaded texture object.
+    uint32_t WiiRuntimeTexture::GetNativeTextureHeight() const {
+        return NativeTextureHeight;
+    }
+
     /// Releases any previously allocated native texture memory and resets the GX texture object.
     void WiiRuntimeTexture::ResetNativeTextureData() {
         if (NativeTextureData != nullptr) {
@@ -100,12 +113,54 @@ namespace helengine::wii {
         NativeTextureDataSize = 0U;
         std::memset(&NativeTextureObject, 0, sizeof(NativeTextureObject));
         NativeTextureObjectInitialized = false;
+        NativeTextureWidth = 0U;
+        NativeTextureHeight = 0U;
+    }
+
+    /// Loads one prepacked GX RGB5A3 payload that is already stored in native tiled texture memory order.
+    void WiiRuntimeTexture::LoadPrepackedRgb5A3(TextureAsset* data) {
+        if (data == nullptr) {
+            throw new ArgumentNullException("data");
+        } else if (data->Width == 0U || data->Height == 0U) {
+            throw new InvalidOperationException("Wii runtime textures require nonzero dimensions.");
+        } else if (data->Colors == nullptr) {
+            throw new InvalidOperationException("Wii runtime textures require prepacked RGB5A3 color data.");
+        }
+
+        const uint32_t width = data->Width;
+        const uint32_t height = data->Height;
+        const uint32_t paddedWidth = (width + 3U) & ~3U;
+        const uint32_t paddedHeight = (height + 3U) & ~3U;
+        const std::size_t expectedColorByteCount = static_cast<std::size_t>(paddedWidth) * static_cast<std::size_t>(paddedHeight) * 2U;
+        if (data->Colors->Length != static_cast<int32_t>(expectedColorByteCount)) {
+            throw new InvalidOperationException("Wii prepacked textures must contain padded tiled RGB5A3 bytes.");
+        }
+
+        NativeTextureDataSize = expectedColorByteCount;
+        NativeTextureData = memalign(32, NativeTextureDataSize);
+        if (NativeTextureData == nullptr) {
+            throw new InvalidOperationException("Could not allocate Wii texture memory.");
+        }
+
+        std::memcpy(NativeTextureData, &(*data->Colors)[0], NativeTextureDataSize);
+        DCFlushRange(NativeTextureData, NativeTextureDataSize);
+        GX_InitTexObj(&NativeTextureObject, NativeTextureData, paddedWidth, paddedHeight, GX_TF_RGB5A3, GX_CLAMP, GX_CLAMP, GX_FALSE);
+        GX_InitTexObjFilterMode(&NativeTextureObject, GX_LINEAR, GX_LINEAR);
+        NativeTextureObjectInitialized = true;
+        NativeTextureWidth = paddedWidth;
+        NativeTextureHeight = paddedHeight;
+        this->set_Width(static_cast<int32_t>(width));
+        this->set_Height(static_cast<int32_t>(height));
     }
 
     /// Encodes one logical RGBA32 texture into tiled GX RGB5A3 memory for Wii text rendering.
     void WiiRuntimeTexture::EncodeRgba32ToRgb5A3(TextureAsset* data) {
         if (data == nullptr) {
             throw new ArgumentNullException("data");
+        } else if (data->Width == 0 || data->Height == 0) {
+            throw new InvalidOperationException("Wii runtime textures require nonzero dimensions.");
+        } else if (data->Colors == nullptr) {
+            throw new InvalidOperationException("Wii runtime textures require RGBA32 color data.");
         }
 
         const uint32_t width = data->Width;
@@ -115,9 +170,9 @@ namespace helengine::wii {
             throw new InvalidOperationException("Wii runtime textures require tightly packed RGBA32 color bytes.");
         }
 
-        const uint32_t paddedWidth = (width + 3U) & ~3U;
-        const uint32_t paddedHeight = (height + 3U) & ~3U;
-        NativeTextureDataSize = static_cast<std::size_t>(paddedWidth) * static_cast<std::size_t>(paddedHeight) * 2U;
+        const uint32_t nativeWidth = (width + 3U) & ~3U;
+        const uint32_t nativeHeight = (height + 3U) & ~3U;
+        NativeTextureDataSize = static_cast<std::size_t>(nativeWidth) * static_cast<std::size_t>(nativeHeight) * 2U;
         NativeTextureData = memalign(32, NativeTextureDataSize);
         if (NativeTextureData == nullptr) {
             throw new InvalidOperationException("Could not allocate Wii texture memory.");
@@ -125,8 +180,8 @@ namespace helengine::wii {
 
         std::memset(NativeTextureData, 0, NativeTextureDataSize);
         uint16_t* destination = static_cast<uint16_t*>(NativeTextureData);
-        for (uint32_t blockY = 0; blockY < paddedHeight; blockY += 4U) {
-            for (uint32_t blockX = 0; blockX < paddedWidth; blockX += 4U) {
+        for (uint32_t blockY = 0; blockY < nativeHeight; blockY += 4U) {
+            for (uint32_t blockX = 0; blockX < nativeWidth; blockX += 4U) {
                 for (uint32_t innerY = 0; innerY < 4U; innerY++) {
                     for (uint32_t innerX = 0; innerX < 4U; innerX++) {
                         const uint32_t sampleX = std::min(blockX + innerX, width - 1U);
@@ -143,9 +198,11 @@ namespace helengine::wii {
         }
 
         DCFlushRange(NativeTextureData, NativeTextureDataSize);
-        GX_InitTexObj(&NativeTextureObject, NativeTextureData, paddedWidth, paddedHeight, GX_TF_RGB5A3, GX_CLAMP, GX_CLAMP, GX_FALSE);
+        GX_InitTexObj(&NativeTextureObject, NativeTextureData, nativeWidth, nativeHeight, GX_TF_RGB5A3, GX_CLAMP, GX_CLAMP, GX_FALSE);
         GX_InitTexObjFilterMode(&NativeTextureObject, GX_LINEAR, GX_LINEAR);
         NativeTextureObjectInitialized = true;
+        NativeTextureWidth = nativeWidth;
+        NativeTextureHeight = nativeHeight;
         this->set_Width(static_cast<int32_t>(width));
         this->set_Height(static_cast<int32_t>(height));
     }

@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <malloc.h>
 
+#include <ogc/conf.h>
 #include <ogc/dvd.h>
 #include <ogc/isfs.h>
 #include <ogc/system.h>
@@ -298,11 +299,11 @@ namespace helengine::wii {
         GX_Init(FifoBuffer, DefaultFifoSize);
 
         const f32 yScale = GX_GetYScaleFactor(RenderMode->efbHeight, RenderMode->xfbHeight);
-        const u16 xfbHeight = GX_SetDispCopyYScale(yScale);
+        const u16 xfbScaledHeight = GX_SetDispCopyYScale(yScale);
 
         GX_SetScissor(0, 0, RenderMode->fbWidth, RenderMode->efbHeight);
         GX_SetDispCopySrc(0, 0, RenderMode->fbWidth, RenderMode->efbHeight);
-        GX_SetDispCopyDst(RenderMode->fbWidth, xfbHeight);
+        GX_SetDispCopyDst(RenderMode->fbWidth, RenderMode->xfbHeight);
         GX_SetCopyFilter(RenderMode->aa, RenderMode->sample_pattern, GX_TRUE, RenderMode->vfilter);
         GX_SetFieldMode(RenderMode->field_rendering, ((RenderMode->viHeight == (RenderMode->xfbHeight * 2)) ? GX_ENABLE : GX_DISABLE));
         GX_SetCullMode(GX_CULL_NONE);
@@ -313,6 +314,15 @@ namespace helengine::wii {
         GX_SetColorUpdate(GX_TRUE);
         GX_SetAlphaUpdate(GX_FALSE);
         GX_SetViewport(0.0F, 0.0F, static_cast<f32>(RenderMode->fbWidth), static_cast<f32>(RenderMode->efbHeight), 0.0F, 1.0F);
+        SYS_Report(
+            "[Wii] Video mode fb=%ux%u efbHeight=%u xfbHeight=%u vi=%ux%u xfbScaled=%u\n",
+            static_cast<unsigned>(RenderMode->fbWidth),
+            static_cast<unsigned>(RenderMode->efbHeight),
+            static_cast<unsigned>(RenderMode->efbHeight),
+            static_cast<unsigned>(RenderMode->xfbHeight),
+            static_cast<unsigned>(RenderMode->viWidth),
+            static_cast<unsigned>(RenderMode->viHeight),
+            static_cast<unsigned>(xfbScaledHeight));
         GX_InvVtxCache();
         GX_InvalidateTexAll();
         return true;
@@ -375,11 +385,13 @@ namespace helengine::wii {
             EngineRenderManager2D = new WiiRenderManager2D();
             EngineRenderManager3D->SetOverlayRenderManager2D(EngineRenderManager2D);
             EngineInputManager = new WiiInputManager();
-            EnginePlatformInfo = new PlatformInfo("wii", "wii-headless");
+            EnginePlatformInfo = new PlatformInfo("wii", "1.0");
 
             initializationStage = "AddPrimaryWindow";
             SetBootPhase(WiiBootPhase::CoreInitialization, GXColor { 0x00, 0x00, 0xFF, 0xFF });
-            EngineRenderManager3D->AddWindow(0, RenderMode->fbWidth, RenderMode->efbHeight);
+            const uint16_t logicalFrameWidth = ResolveLogicalFrameWidth();
+            const uint16_t logicalFrameHeight = ResolveLogicalFrameHeight();
+            EngineRenderManager3D->AddWindow(0, logicalFrameWidth, logicalFrameHeight);
 
             initializationStage = "InitializeCore";
             EngineCore->Initialize(EngineRenderManager3D, EngineRenderManager2D, EngineInputManager, EnginePlatformInfo, options);
@@ -567,7 +579,11 @@ namespace helengine::wii {
                 SYS_Report("[Wii] Engine draw begin frame=%lu\n", static_cast<unsigned long>(DrawFrameLogCount));
             }
             EngineCore->Draw();
-            EngineRenderManager2D->RenderCapturedText(
+            const uint16_t logicalFrameWidth = ResolveLogicalFrameWidth();
+            const uint16_t logicalFrameHeight = ResolveLogicalFrameHeight();
+            EngineRenderManager2D->RenderCapturedCommands(
+                logicalFrameWidth,
+                logicalFrameHeight,
                 static_cast<uint16_t>(RenderMode->fbWidth),
                 static_cast<uint16_t>(RenderMode->efbHeight));
             if (DrawFrameLogCount < 8U) {
@@ -636,25 +652,42 @@ namespace helengine::wii {
     GXColor WiiApplication::ResolvePresentedClearColor() {
 #if HELENGINE_WII_HAS_GENERATED_CORE
         if (EngineInitialized) {
-            if (UpdateCompletedSincePresent && DrawCompletedSincePresent) {
-                UpdateCompletedSincePresent = false;
-                DrawCompletedSincePresent = false;
-                return GXColor { 0x00, 0x80, 0x80, 0xFF };
-            }
-
-            if (UpdateCompletedSincePresent) {
-                UpdateCompletedSincePresent = false;
-                return GXColor { 0xC0, 0xC0, 0x00, 0xFF };
-            }
-
-            if (DrawCompletedSincePresent) {
-                DrawCompletedSincePresent = false;
-                return GXColor { 0x00, 0x60, 0xA0, 0xFF };
+            UpdateCompletedSincePresent = false;
+            DrawCompletedSincePresent = false;
+            if (EngineRenderManager3D != nullptr && EngineRenderManager3D->HasPresentedClearColor()) {
+                return EngineRenderManager3D->GetPresentedClearColor();
             }
         }
 #endif
 
         return ClearColor;
+    }
+
+    /// Returns whether the current Wii system configuration requests widescreen presentation.
+    bool WiiApplication::IsWidescreenAspectEnabled() const {
+        return CONF_GetAspectRatio() == CONF_ASPECT_16_9;
+    }
+
+    /// Resolves the logical frame width reported to the shared engine layout systems.
+    uint16_t WiiApplication::ResolveLogicalFrameWidth() const {
+        if (RenderMode == nullptr) {
+            return 0U;
+        }
+
+        if (IsWidescreenAspectEnabled()) {
+            return static_cast<uint16_t>(((static_cast<uint32_t>(RenderMode->efbHeight) * 16U) + 8U) / 9U);
+        }
+
+        return static_cast<uint16_t>(RenderMode->fbWidth);
+    }
+
+    /// Resolves the logical frame height reported to the shared engine layout systems.
+    uint16_t WiiApplication::ResolveLogicalFrameHeight() const {
+        if (RenderMode == nullptr) {
+            return 0U;
+        }
+
+        return static_cast<uint16_t>(RenderMode->efbHeight);
     }
 
     /// Sets the current boot phase and visible clear color.

@@ -9,6 +9,8 @@ class RuntimeTexture;
 class IDrawable2D;
 class byte4;
 class float4;
+class RenderCommandList2D;
+class RenderCommandListBuilder2D;
 
 namespace helengine::wii {
     class WiiRuntimeTexture;
@@ -70,8 +72,8 @@ namespace helengine::wii {
         /// Clears previously captured 2D draw requests before the next engine frame begins.
         void BeginFrame();
 
-        /// Renders all captured text draw requests through the Wii GX overlay path.
-        void RenderCapturedText(uint16_t frameWidth, uint16_t frameHeight);
+        /// Builds and executes the shared 2D command list for the current Wii frame.
+        void RenderCapturedCommands(uint16_t logicalFrameWidth, uint16_t logicalFrameHeight, uint16_t physicalFrameWidth, uint16_t physicalFrameHeight);
 
         /// Returns whether the current frame captured any 2D draw requests.
         bool HasCapturedDrawables() const;
@@ -89,14 +91,32 @@ namespace helengine::wii {
         bool get_DidSubmitGlyph() const;
 
     private:
+        /// Executes one shared 2D command list through the Wii GX overlay path.
+        void ExecuteCommandList(RenderCommandList2D* commandList, uint16_t logicalFrameWidth, uint16_t logicalFrameHeight, uint16_t physicalFrameWidth, uint16_t physicalFrameHeight);
+
+        /// Executes one textured-quad command from the shared 2D command list.
+        void ExecuteTexturedQuadCommand(RenderCommandList2D* commandList, int32_t payloadIndex, uint16_t logicalFrameWidth, uint16_t logicalFrameHeight);
+
+        /// Executes one glyph-quad command from the shared 2D command list.
+        void ExecuteGlyphQuadCommand(RenderCommandList2D* commandList, int32_t payloadIndex, uint16_t logicalFrameWidth, uint16_t logicalFrameHeight);
+
+        /// Executes one rounded-rectangle command from the shared 2D command list.
+        void ExecuteRoundedRectCommand(RenderCommandList2D* commandList, int32_t payloadIndex, uint16_t logicalFrameWidth, uint16_t logicalFrameHeight);
+
+        /// Applies one clip rectangle from the shared 2D command list to the active GX scissor state.
+        void ApplyClipRect(const float4& clipRect, uint16_t logicalFrameWidth, uint16_t logicalFrameHeight, uint16_t physicalFrameWidth, uint16_t physicalFrameHeight);
+
+        /// Restores the active GX scissor state to the full frame bounds.
+        void ResetClipRect(uint16_t physicalFrameWidth, uint16_t physicalFrameHeight);
+
         /// Configures one native GX pass that draws solid diagnostics without texturing.
-        void ConfigureSolidColorPipeline(uint16_t frameWidth, uint16_t frameHeight);
+        void ConfigureSolidColorPipeline(uint16_t logicalFrameWidth, uint16_t logicalFrameHeight, uint16_t physicalFrameWidth, uint16_t physicalFrameHeight);
 
         /// Emits one solid screen-space quad in pixel coordinates for minimal runtime capture diagnostics.
         void DrawSolidQuad2D(float x, float y, float width, float height, byte4 color);
 
         /// Configures the native GX state used by the Wii text overlay pass.
-        void ConfigureTextPipeline(uint16_t frameWidth, uint16_t frameHeight);
+        void ConfigureTextPipeline(uint16_t logicalFrameWidth, uint16_t logicalFrameHeight, uint16_t physicalFrameWidth, uint16_t physicalFrameHeight);
 
         /// Emits one textured screen-space quad in pixel coordinates for the active glyph pass.
         void DrawTexturedQuad2D(float x, float y, float width, float height, const float4& sourceRect, byte4 color, WiiRuntimeTexture* texture);

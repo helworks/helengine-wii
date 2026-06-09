@@ -124,7 +124,7 @@ public sealed class WiiPackagedBuildWorkspaceTests {
 
             using FileStream defaultAtlasStream = new FileStream(Path.Combine(outputRootPath, "disc", "files", "cooked", "fonts", "default.ps2tex"), FileMode.Open, FileAccess.Read, FileShare.Read);
             TextureAsset stagedDefaultAtlasTexture = Assert.IsType<TextureAsset>(FilesAssetSerializer.Deserialize(defaultAtlasStream));
-            Assert.Equal(TextureAssetColorFormat.Rgba32, stagedDefaultAtlasTexture.ColorFormat);
+            Assert.Equal(TextureAssetColorFormat.GxRgb5A3, stagedDefaultAtlasTexture.ColorFormat);
         } finally {
             Directory.SetCurrentDirectory(previousDirectory);
             if (Directory.Exists(workingRootPath)) {

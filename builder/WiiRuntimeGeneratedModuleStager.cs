@@ -212,10 +212,6 @@ public sealed class WiiRuntimeGeneratedModuleStager {
         ScriptComponentPlayerDeserializerGenerator generator = new ScriptComponentPlayerDeserializerGenerator();
         ScriptComponentReflectionSchemaBuilder schemaBuilder = new ScriptComponentReflectionSchemaBuilder();
         IReadOnlyList<ScriptComponentReflectionSchema> schemas = DiscoverAutomaticRuntimeComponentSchemas(schemaBuilder, generator, additionalComponentTypes);
-        if (schemas.Count == 0) {
-            return;
-        }
-
         for (int index = 0; index < schemas.Count; index++) {
             ScriptComponentReflectionSchema schema = schemas[index];
             string className = generator.BuildNativeDeserializerClassName(schema);
@@ -227,12 +223,33 @@ public sealed class WiiRuntimeGeneratedModuleStager {
                 generator.GenerateNativeDeserializerSource(schema));
         }
 
+        WriteGeneratedRuntimeComponentDeserializerRegistrationFromGeneratedCore(generatedCoreRootPath);
+    }
+
+    /// <summary>
+    /// Rebuilds the generated runtime component deserializer registration unit from the deserializer headers currently present in generated-core.
+    /// </summary>
+    /// <param name="generatedCoreRootPath">Generated core root that contains the generated runtime deserializer headers.</param>
+    void WriteGeneratedRuntimeComponentDeserializerRegistrationFromGeneratedCore(string generatedCoreRootPath) {
+        if (string.IsNullOrWhiteSpace(generatedCoreRootPath)) {
+            throw new ArgumentException("Generated core root path must be provided.", nameof(generatedCoreRootPath));
+        }
+
+        Directory.CreateDirectory(generatedCoreRootPath);
+        string[] generatedDeserializerClassNames = Directory
+            .GetFiles(generatedCoreRootPath, "GeneratedRuntime*Deserializer.hpp", SearchOption.TopDirectoryOnly)
+            .Select(Path.GetFileNameWithoutExtension)
+            .Where(className => !string.IsNullOrWhiteSpace(className))
+            .Where(className => !string.Equals(className, "GeneratedRuntimeComponentDeserializerRegistration", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(className => className, StringComparer.Ordinal)
+            .ToArray();
+
         File.WriteAllText(
             Path.Combine(generatedCoreRootPath, "GeneratedRuntimeComponentDeserializerRegistration.hpp"),
             BuildGeneratedRuntimeComponentDeserializerRegistrationHeader());
         File.WriteAllText(
             Path.Combine(generatedCoreRootPath, "GeneratedRuntimeComponentDeserializerRegistration.cpp"),
-            BuildGeneratedRuntimeComponentDeserializerRegistrationSource(schemas, generator));
+            BuildGeneratedRuntimeComponentDeserializerRegistrationSource(generatedDeserializerClassNames));
     }
 
     /// <summary>
@@ -355,17 +372,12 @@ public sealed class WiiRuntimeGeneratedModuleStager {
     /// <summary>
     /// Builds the generated native registration source used to install all emitted automatic runtime component deserializers.
     /// </summary>
-    /// <param name="schemas">Reflected component schemas whose generated deserializers should be registered.</param>
-    /// <param name="generator">Native deserializer generator used to resolve generated class names.</param>
+    /// <param name="generatedDeserializerClassNames">Generated deserializer class names that should be registered.</param>
     /// <returns>Generated native registration source text.</returns>
     string BuildGeneratedRuntimeComponentDeserializerRegistrationSource(
-        IReadOnlyList<ScriptComponentReflectionSchema> schemas,
-        ScriptComponentPlayerDeserializerGenerator generator) {
-        if (schemas == null) {
-            throw new ArgumentNullException(nameof(schemas));
-        }
-        if (generator == null) {
-            throw new ArgumentNullException(nameof(generator));
+        IReadOnlyList<string> generatedDeserializerClassNames) {
+        if (generatedDeserializerClassNames == null) {
+            throw new ArgumentNullException(nameof(generatedDeserializerClassNames));
         }
 
         StringBuilder builder = new StringBuilder();
@@ -375,8 +387,8 @@ public sealed class WiiRuntimeGeneratedModuleStager {
         builder.AppendLine("#include \"GeneratedRuntimeComponentDeserializerRegistration.hpp\"");
         builder.AppendLine("#include \"RuntimeComponentRegistry.hpp\"");
         builder.AppendLine("#include \"runtime/native_exceptions.hpp\"");
-        for (int index = 0; index < schemas.Count; index++) {
-            builder.AppendLine($"#include \"{generator.BuildNativeDeserializerClassName(schemas[index])}.hpp\"");
+        for (int index = 0; index < generatedDeserializerClassNames.Count; index++) {
+            builder.AppendLine($"#include \"{generatedDeserializerClassNames[index]}.hpp\"");
         }
 
         builder.AppendLine();
@@ -386,8 +398,8 @@ public sealed class WiiRuntimeGeneratedModuleStager {
         builder.AppendLine("    {");
         builder.AppendLine("throw new ArgumentNullException(\"registry\");");
         builder.AppendLine("    }");
-        for (int index = 0; index < schemas.Count; index++) {
-            builder.AppendLine($"registry->Register(new ::{generator.BuildNativeDeserializerClassName(schemas[index])}());");
+        for (int index = 0; index < generatedDeserializerClassNames.Count; index++) {
+            builder.AppendLine($"registry->Register(new ::{generatedDeserializerClassNames[index]}());");
         }
 
         builder.AppendLine("}");

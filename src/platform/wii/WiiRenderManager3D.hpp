@@ -2,11 +2,14 @@
 
 #include "RenderManager3D.hpp"
 
+#include <gccore.h>
+
 class ContentManager;
 class ModelAsset;
 class RendererBackendCapabilityProfile;
 class RuntimeMaterial;
 class RuntimeModel;
+class float4;
 
 namespace helengine::wii {
     class WiiRenderManager2D;
@@ -50,11 +53,32 @@ namespace helengine::wii {
         /// Reports whether this backend has emitted a native scene frame.
         bool HasRenderedScene() const;
 
+        /// Returns whether the current frame resolved one authored camera clear color for presentation.
+        bool HasPresentedClearColor() const;
+
+        /// Returns the authored camera clear color resolved for the current presented frame.
+        GXColor GetPresentedClearColor() const;
+
     private:
+        /// Refreshes the current presented clear color from the active authored camera set.
+        void UpdatePresentedClearColorFromActiveCameras();
+
+        /// Converts one normalized engine color into the byte GX color contract used by the copy clear path.
+        static GXColor ToGxColor(float4 color);
+
+        /// Converts one normalized engine color channel into the byte GX range expected by the Wii renderer.
+        static uint8_t ConvertNormalizedColorChannel(float value);
+
         /// Shared backend capability object reused across frame calls.
         RendererBackendCapabilityProfile* CapabilityProfile;
 
         /// Stores the 2D render manager whose captured overlay drawables are part of the draw boundary.
         WiiRenderManager2D* OverlayRenderManager2D;
+
+        /// Stores the authored clear color that should be presented for the current frame when a camera enables it.
+        GXColor PresentedClearColor;
+
+        /// Tracks whether the current frame resolved one authored camera clear color for presentation.
+        bool PresentedClearColorValid;
     };
 }

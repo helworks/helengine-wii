@@ -50,6 +50,46 @@ namespace helengine::wii {
                 | static_cast<uint32_t>(bytes[3]);
         }
 
+        bool IsFstRangeValid(std::size_t offset, std::size_t length) {
+            return offset <= FstBytes.size() && length <= FstBytes.size() - offset;
+        }
+
+        bool TryFindFstTerminator(std::size_t startOffset, std::size_t& terminatorOffset) {
+            if (startOffset >= FstBytes.size()) {
+                return false;
+            }
+
+            for (std::size_t index = startOffset; index < FstBytes.size(); index++) {
+                if (FstBytes[index] == 0U) {
+                    terminatorOffset = index;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        bool CaptureFstSnapshotFromLowMemory() {
+            const uint32_t fstAddress = *reinterpret_cast<volatile uint32_t*>(FstAddressLowMemoryAddress);
+            const uint32_t fstSize = *reinterpret_cast<volatile uint32_t*>(FstSizeLowMemoryAddress);
+            SYS_Report("[Wii] FST low memory address=%08lX size=%08lX\n",
+                static_cast<unsigned long>(fstAddress),
+                static_cast<unsigned long>(fstSize));
+            if (fstAddress == 0U || fstSize < FstEntrySize) {
+                SYS_Report("[Wii] Packaged Wii disc FST low-memory handoff was invalid.\n");
+                return false;
+            }
+
+            const uint8_t* fstBytes = reinterpret_cast<const uint8_t*>(static_cast<uintptr_t>(fstAddress));
+            FstBytes.assign(fstBytes, fstBytes + fstSize);
+            const uint32_t rootEntryCount = ReadBigEndianU32(FstBytes.data() + 8);
+            SYS_Report("[Wii] FST root entry count=%08lX stringTableOffset=%08lX capturedSize=%08lX\n",
+                static_cast<unsigned long>(rootEntryCount),
+                static_cast<unsigned long>(rootEntryCount * FstEntrySize),
+                static_cast<unsigned long>(FstBytes.size()));
+            return true;
+        }
+
         /// Reads an arbitrary byte range from the opened Wii partition using the synchronous decrypted libogc DI API.
         bool ReadDiscRange(void* destination, std::size_t offset, std::size_t length) {
             if (destination == nullptr) {
@@ -186,18 +226,10 @@ namespace helengine::wii {
 
     /// Copies the apploader-loaded packaged-disc FST from Wii low memory, then indexes all packaged file entries.
     bool WiiDiscFileSystem::LoadIndex() {
-        const uint32_t fstAddress = *reinterpret_cast<volatile uint32_t*>(FstAddressLowMemoryAddress);
-        const uint32_t fstSize = *reinterpret_cast<volatile uint32_t*>(FstSizeLowMemoryAddress);
-        SYS_Report("[Wii] FST low memory address=%08lX size=%08lX\n",
-            static_cast<unsigned long>(fstAddress),
-            static_cast<unsigned long>(fstSize));
-        if (fstAddress == 0U || fstSize < FstEntrySize) {
-            SYS_Report("[Wii] Packaged Wii disc FST low-memory handoff was invalid.\n");
+        if (FstBytes.empty() && !CaptureFstSnapshotFromLowMemory()) {
             return false;
         }
 
-        const uint8_t* fstBytes = reinterpret_cast<const uint8_t*>(static_cast<uintptr_t>(fstAddress));
-        FstBytes.assign(fstBytes, fstBytes + fstSize);
         FileEntries.clear();
         IndexDirectory(0U, "dvd:/");
         IndexLoaded = true;
@@ -208,9 +240,22 @@ namespace helengine::wii {
     /// Recursively indexes one FST directory entry and all of its children.
     void WiiDiscFileSystem::IndexDirectory(std::size_t directoryEntryIndex, std::string directoryPath) {
         const std::size_t directoryOffset = directoryEntryIndex * FstEntrySize;
+        if (!IsFstRangeValid(directoryOffset, FstEntrySize)) {
+            throw std::runtime_error("Packaged Wii disc FST directory entry offset was outside the captured FST.");
+        }
+
         const std::size_t directoryEndIndex = ReadBigEndianU32(FstBytes.data() + directoryOffset + 8);
         for (std::size_t entryIndex = directoryEntryIndex + 1; entryIndex < directoryEndIndex; entryIndex++) {
             const std::size_t entryOffset = entryIndex * FstEntrySize;
+            if (!IsFstRangeValid(entryOffset, FstEntrySize)) {
+                SYS_Report("[Wii] FST entry range invalid index=%lu offset=%08lX entrySize=%08lX capturedSize=%08lX\n",
+                    static_cast<unsigned long>(entryIndex),
+                    static_cast<unsigned long>(entryOffset),
+                    static_cast<unsigned long>(FstEntrySize),
+                    static_cast<unsigned long>(FstBytes.size()));
+                throw std::runtime_error("Packaged Wii disc FST entry offset was outside the captured FST.");
+            }
+
             const bool isDirectory = FstBytes[entryOffset] != 0;
             const std::string entryName = ReadEntryName(entryIndex);
             const std::string entryPath = directoryPath == "dvd:/"
@@ -242,10 +287,27 @@ namespace helengine::wii {
         const std::size_t entryCount = ReadBigEndianU32(FstBytes.data() + 8);
         const std::size_t stringTableOffset = entryCount * FstEntrySize;
         const std::size_t entryOffset = entryIndex * FstEntrySize;
+        if (!IsFstRangeValid(entryOffset, FstEntrySize)) {
+            throw std::runtime_error("Packaged Wii disc FST name entry offset was outside the captured FST.");
+        }
+
         const uint32_t nameOffset = (static_cast<uint32_t>(FstBytes[entryOffset + 1]) << 16)
             | (static_cast<uint32_t>(FstBytes[entryOffset + 2]) << 8)
             | static_cast<uint32_t>(FstBytes[entryOffset + 3]);
-        return std::string(reinterpret_cast<const char*>(FstBytes.data() + stringTableOffset + nameOffset));
+        const std::size_t absoluteNameOffset = stringTableOffset + nameOffset;
+        std::size_t terminatorOffset = 0U;
+        if (!TryFindFstTerminator(absoluteNameOffset, terminatorOffset)) {
+            SYS_Report("[Wii] FST name invalid entry=%lu entryCount=%08lX stringTableOffset=%08lX nameOffset=%08lX absoluteNameOffset=%08lX capturedSize=%08lX\n",
+                static_cast<unsigned long>(entryIndex),
+                static_cast<unsigned long>(entryCount),
+                static_cast<unsigned long>(stringTableOffset),
+                static_cast<unsigned long>(nameOffset),
+                static_cast<unsigned long>(absoluteNameOffset),
+                static_cast<unsigned long>(FstBytes.size()));
+            throw std::runtime_error("Packaged Wii disc FST string-table entry was outside the captured FST.");
+        }
+
+        return std::string(reinterpret_cast<const char*>(FstBytes.data() + absoluteNameOffset), terminatorOffset - absoluteNameOffset);
     }
 
     /// Normalizes one <c>dvd:/...</c> path into the slash form used by indexed entries.

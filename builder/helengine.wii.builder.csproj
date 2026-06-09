@@ -10,6 +10,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="System.Drawing.Common" Version="9.0.11" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="$(HelEngineRoot)\engine\helengine.baseplatform\helengine.baseplatform.csproj" />
     <ProjectReference Include="$(HelEngineRoot)\engine\helengine.core\helengine.core.csproj" />
     <ProjectReference Include="$(HelEngineRoot)\engine\helengine.editor\helengine.editor.csproj" />

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 
 #include <gccore.h>
 
@@ -18,7 +19,7 @@ namespace helengine::wii {
         /// Releases any owned native texture memory and GX texture state.
         ~WiiRuntimeTexture() override;
 
-        /// Encodes one shared-engine texture asset into the first Wii texture format used by the menu text proof.
+        /// Loads one shared-engine texture asset into one Wii-native GX texture object.
         void LoadFromRaw(TextureAsset* data);
 
         /// Returns whether one native GX texture object has been initialized for this runtime texture.
@@ -27,9 +28,18 @@ namespace helengine::wii {
         /// Returns the native GX texture object used by glyph rendering.
         GXTexObj* GetNativeTextureObject();
 
+        /// Returns the native GX texture width used by the uploaded texture object.
+        uint32_t GetNativeTextureWidth() const;
+
+        /// Returns the native GX texture height used by the uploaded texture object.
+        uint32_t GetNativeTextureHeight() const;
+
     private:
         /// Releases any previously allocated native texture memory and resets the GX texture object.
         void ResetNativeTextureData();
+
+        /// Loads one prepacked GX RGB5A3 payload that is already stored in native tiled texture memory order.
+        void LoadPrepackedRgb5A3(TextureAsset* data);
 
         /// Encodes one logical RGBA32 texture into tiled GX RGB5A3 memory for Wii text rendering.
         void EncodeRgba32ToRgb5A3(TextureAsset* data);
@@ -45,5 +55,11 @@ namespace helengine::wii {
 
         /// Tracks whether `NativeTextureObject` currently contains valid GX texture state.
         bool NativeTextureObjectInitialized;
+
+        /// Native uploaded GX texture width, rounded to a legal hardware dimension.
+        uint32_t NativeTextureWidth;
+
+        /// Native uploaded GX texture height, rounded to a legal hardware dimension.
+        uint32_t NativeTextureHeight;
     };
 }

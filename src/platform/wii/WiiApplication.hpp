@@ -48,6 +48,15 @@ namespace helengine::wii {
         /// Resolves the currently visible diagnostic color for the next presented frame.
         GXColor ResolvePresentedClearColor();
 
+        /// Returns whether the current Wii system configuration requests widescreen presentation.
+        bool IsWidescreenAspectEnabled() const;
+
+        /// Resolves the logical frame width reported to the shared engine layout systems.
+        uint16_t ResolveLogicalFrameWidth() const;
+
+        /// Resolves the logical frame height reported to the shared engine layout systems.
+        uint16_t ResolveLogicalFrameHeight() const;
+
         /// Sets the current boot phase and visible clear color.
         void SetBootPhase(WiiBootPhase phase, GXColor color);
 

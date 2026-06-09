@@ -110,10 +110,10 @@ public sealed class WiiRuntimeSourceTests {
     }
 
     /// <summary>
-    /// Ensures the Wii 2D bridge can rebuild packaged font atlas textures into native GX runtime textures.
+    /// Ensures the Wii 2D bridge accepts already cooked GX RGB5A3 textures instead of requiring runtime RGBA32 transcoding.
     /// </summary>
     [Fact]
-    public void PackagedGpuText_DeclaresWiiRuntimeTextureAndRawTextureUploadPath() {
+    public void PackagedGpuText_DeclaresWiiRuntimeTextureAndDirectGxRgb5A3UploadPath() {
         string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
         string runtimeTextureHeaderPath = Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRuntimeTexture.hpp");
         string runtimeTextureSourcePath = Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRuntimeTexture.cpp");
@@ -128,7 +128,8 @@ public sealed class WiiRuntimeSourceTests {
         Assert.Contains("class WiiRuntimeTexture final : public RuntimeTexture", runtimeTextureHeaderSource, StringComparison.Ordinal);
         Assert.Contains("void LoadFromRaw(TextureAsset* data);", runtimeTextureHeaderSource, StringComparison.Ordinal);
         Assert.Contains("GXTexObj* GetNativeTextureObject();", runtimeTextureHeaderSource, StringComparison.Ordinal);
-        Assert.Contains("TextureAssetColorFormat::Rgba32", runtimeTextureSource, StringComparison.Ordinal);
+        Assert.Contains("TextureAssetColorFormat::GxRgb5A3", runtimeTextureSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("Wii text proof-of-life currently supports only RGBA32 packaged font atlas textures.", runtimeTextureSource, StringComparison.Ordinal);
         Assert.Contains("GX_InitTexObj(", runtimeTextureSource, StringComparison.Ordinal);
         Assert.Contains("GX_InitTexObjFilterMode(", runtimeTextureSource, StringComparison.Ordinal);
         Assert.Contains("DCFlushRange(", runtimeTextureSource, StringComparison.Ordinal);
@@ -149,17 +150,124 @@ public sealed class WiiRuntimeSourceTests {
         string renderManagerSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRenderManager2D.cpp"));
         string applicationSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiApplication.cpp"));
 
-        Assert.Contains("void RenderCapturedText(uint16_t frameWidth, uint16_t frameHeight);", renderManagerHeaderSource, StringComparison.Ordinal);
-        Assert.Contains("TextLayoutUtils::WrapText(", renderManagerSource, StringComparison.Ordinal);
-        Assert.Contains("TextLayoutAlignmentUtils::MeasureVisibleLineWidth(", renderManagerSource, StringComparison.Ordinal);
-        Assert.Contains("if (line.empty()) {", renderManagerSource, StringComparison.Ordinal);
-        Assert.Contains("lineOffsets.push_back(0.0);", renderManagerSource, StringComparison.Ordinal);
-        Assert.Contains("font->get_Texture()", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("void RenderCapturedCommands(uint16_t logicalFrameWidth, uint16_t logicalFrameHeight, uint16_t physicalFrameWidth, uint16_t physicalFrameHeight);", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("void ExecuteGlyphQuadCommand(RenderCommandList2D* commandList, int32_t payloadIndex, uint16_t logicalFrameWidth, uint16_t logicalFrameHeight);", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("GetGlyphQuadTexture(", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("GetGlyphQuadBounds(", renderManagerSource, StringComparison.Ordinal);
         Assert.Contains("GX_LoadTexObj(", renderManagerSource, StringComparison.Ordinal);
         Assert.Contains("GX_Begin(GX_QUADS, GX_VTXFMT0, 4);", renderManagerSource, StringComparison.Ordinal);
-        Assert.Contains("TextQueue", renderManagerSource, StringComparison.Ordinal);
-        Assert.Contains("EngineRenderManager2D->RenderCapturedText(", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("DidSubmitGlyph = true;", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("EngineRenderManager2D->RenderCapturedCommands(", applicationSource, StringComparison.Ordinal);
         Assert.Contains("EngineCore->Draw();", applicationSource, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ensures the Wii 2D renderer now uses the shared command-list path for non-text UI, including clip transitions.
+    /// </summary>
+    [Fact]
+    public void PackagedGpuText_UsesSharedCommandListAndClipAwareNonTextUiPath() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string applicationSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiApplication.cpp"));
+        string renderManagerHeaderSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRenderManager2D.hpp"));
+        string renderManagerSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRenderManager2D.cpp"));
+
+        Assert.Contains("RenderCapturedCommands(", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("RenderCommandList2D", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("RenderCommandListBuilder2D", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("void RenderCapturedCommands(uint16_t logicalFrameWidth, uint16_t logicalFrameHeight, uint16_t physicalFrameWidth, uint16_t physicalFrameHeight);", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("void ExecuteCommandList(RenderCommandList2D* commandList, uint16_t logicalFrameWidth, uint16_t logicalFrameHeight, uint16_t physicalFrameWidth, uint16_t physicalFrameHeight);", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("void ExecuteRoundedRectCommand(RenderCommandList2D* commandList, int32_t payloadIndex, uint16_t logicalFrameWidth, uint16_t logicalFrameHeight);", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("void ApplyClipRect(const float4& clipRect, uint16_t logicalFrameWidth, uint16_t logicalFrameHeight, uint16_t physicalFrameWidth, uint16_t physicalFrameHeight);", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("#include \"RenderCommand2DType.hpp\"", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("#include \"RenderCommandList2D.hpp\"", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("#include \"RenderCommandListBuilder2D.hpp\"", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("RenderCommandListBuilder2D commandListBuilder {};", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("ExecuteCommandList(commandList, logicalFrameWidth, logicalFrameHeight, physicalFrameWidth, physicalFrameHeight);", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("case RenderCommand2DType::ClipPush:", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("case RenderCommand2DType::ClipPop:", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("case RenderCommand2DType::TexturedQuad:", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("case RenderCommand2DType::GlyphQuad:", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("case RenderCommand2DType::RoundedRect:", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("GX_SetScissor(", renderManagerSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("void RenderCapturedText(uint16_t frameWidth, uint16_t frameHeight);", renderManagerHeaderSource, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ensures presented Wii frames expose the authored platform version string and honor the active camera clear color instead of the old diagnostic steady-state clears.
+    /// </summary>
+    [Fact]
+    public void PackagedGpuText_UsesAuthoredPlatformVersionAndCameraClearColorForPresentedFrames() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string applicationSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiApplication.cpp"));
+        string renderManagerHeaderSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRenderManager3D.hpp"));
+        string renderManagerSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRenderManager3D.cpp"));
+
+        Assert.Contains("new PlatformInfo(\"wii\", \"1.0\")", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("bool HasPresentedClearColor() const;", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("GXColor GetPresentedClearColor() const;", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("void UpdatePresentedClearColorFromActiveCameras();", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("static GXColor ToGxColor(float4 color);", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("static uint8_t ConvertNormalizedColorChannel(float value);", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("UpdatePresentedClearColorFromActiveCameras();", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("CameraClearSettings clearSettings = camera->get_ClearSettings();", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("if (!clearSettings.get_ClearColorEnabled())", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("PresentedClearColor = ToGxColor(clearSettings.get_ClearColor());", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("PresentedClearColorValid = true;", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("if (EngineRenderManager3D != nullptr && EngineRenderManager3D->HasPresentedClearColor())", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("return EngineRenderManager3D->GetPresentedClearColor();", applicationSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("return GXColor { 0x00, 0x80, 0x80, 0xFF };", applicationSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("return GXColor { 0xC0, 0xC0, 0x00, 0xFF };", applicationSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("return GXColor { 0x00, 0x60, 0xA0, 0xFF };", applicationSource, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ensures the Wii host exposes a widescreen logical window to the shared UI layout system while keeping GX presentation and scissor bounds on the physical framebuffer.
+    /// </summary>
+    [Fact]
+    public void PackagedGpuText_UsesAspectAwareLogicalWindowSizeAndPhysicalFramebufferScissor() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string applicationHeaderSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiApplication.hpp"));
+        string applicationSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiApplication.cpp"));
+        string renderManagerHeaderSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRenderManager2D.hpp"));
+        string renderManagerSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRenderManager2D.cpp"));
+
+        Assert.Contains("#include <ogc/conf.h>", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("bool IsWidescreenAspectEnabled() const;", applicationHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("uint16_t ResolveLogicalFrameWidth() const;", applicationHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("uint16_t ResolveLogicalFrameHeight() const;", applicationHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("return CONF_GetAspectRatio() == CONF_ASPECT_16_9;", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("return static_cast<uint16_t>(((static_cast<uint32_t>(RenderMode->efbHeight) * 16U) + 8U) / 9U);", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("const uint16_t logicalFrameWidth = ResolveLogicalFrameWidth();", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("const uint16_t logicalFrameHeight = ResolveLogicalFrameHeight();", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("EngineRenderManager3D->AddWindow(0, logicalFrameWidth, logicalFrameHeight);", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("EngineRenderManager2D->RenderCapturedCommands(", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("logicalFrameWidth", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("logicalFrameHeight", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("void RenderCapturedCommands(uint16_t logicalFrameWidth, uint16_t logicalFrameHeight, uint16_t physicalFrameWidth, uint16_t physicalFrameHeight);", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("const float horizontalScale = static_cast<float>(physicalFrameWidth) / static_cast<float>(logicalFrameWidth);", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("GX_SetScissor(0U, 0U, physicalFrameWidth, physicalFrameHeight);", renderManagerSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("PresentedFrameHeight", applicationSource, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ensures Wii textured UI quads remap logical UVs onto GC-style 4-pixel padded GX texture dimensions instead of power-of-two expansion.
+    /// </summary>
+    [Fact]
+    public void PackagedGpuText_UsesFourPixelPaddedNativeTextureDimensionsForSpriteQuads() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string renderManagerSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRenderManager2D.cpp"));
+        string runtimeTextureHeaderSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRuntimeTexture.hpp"));
+        string runtimeTextureSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRuntimeTexture.cpp"));
+
+        Assert.Contains("uint32_t GetNativeTextureWidth() const;", runtimeTextureHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("uint32_t GetNativeTextureHeight() const;", runtimeTextureHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("const uint32_t nativeWidth = (width + 3U) & ~3U;", runtimeTextureSource, StringComparison.Ordinal);
+        Assert.Contains("const uint32_t nativeHeight = (height + 3U) & ~3U;", runtimeTextureSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("ResolveTextureDimension(uint32_t logicalDimension)", runtimeTextureSource, StringComparison.Ordinal);
+        Assert.Contains("texture->GetNativeTextureWidth()", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("texture->GetNativeTextureHeight()", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("sourceRect.X * logicalWidth / nativeWidth", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("sourceRect.W * logicalHeight / nativeHeight", renderManagerSource, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -266,10 +374,19 @@ public sealed class WiiRuntimeSourceTests {
         string mainSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "main.cpp"));
         string applicationSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiApplication.cpp"));
 
+        Assert.Contains("static struct __argv NullSafeSystemArgv = {};", mainSource, StringComparison.Ordinal);
+        Assert.Contains("extern \"C\" void __CheckARGV()", mainSource, StringComparison.Ordinal);
+        Assert.Contains("__system_argv = &NullSafeSystemArgv;", mainSource, StringComparison.Ordinal);
         Assert.Contains("SYS_STDIO_Report(true);", mainSource, StringComparison.Ordinal);
         Assert.Contains("std::fprintf(stderr, \"[Wii] stderr bridge armed.\\n\");", mainSource, StringComparison.Ordinal);
         Assert.Contains("std::fflush(stderr);", mainSource, StringComparison.Ordinal);
         Assert.Contains("SYS_Report(\"[Wii] main() entered.\\n\");", mainSource, StringComparison.Ordinal);
+        Assert.True(
+            mainSource.IndexOf("SYS_STDIO_Report(true);", StringComparison.Ordinal) < mainSource.IndexOf("ISFS_Initialize()", StringComparison.Ordinal),
+            "Expected SYS_STDIO_Report(true) to run before the title-data ISFS startup probe.");
+        Assert.True(
+            mainSource.IndexOf("SYS_Report(\"[Wii] main() entered.\\n\");", StringComparison.Ordinal) < mainSource.IndexOf("ISFS_Initialize()", StringComparison.Ordinal),
+            "Expected the earliest main() OSReport to run before the title-data ISFS startup probe.");
         Assert.Contains("SYS_Report(\"[Wii] InitializeEngineCore begin.\\n\");", applicationSource, StringComparison.Ordinal);
     }
 
@@ -312,17 +429,17 @@ public sealed class WiiRuntimeSourceTests {
     }
 
     /// <summary>
-    /// Ensures the packaged-disc Wii entrypoint mounts <c>sd:/</c> and writes one earliest-possible host-readable trace file there for Dolphin folder-sync debugging.
+    /// Ensures the packaged-disc Wii entrypoint no longer mounts <c>sd:/</c> during startup because the old libogc SD trace probe trips argv invalid-read warnings before normal runtime boot.
     /// </summary>
     [Fact]
-    public void PackagedDebugLogging_WritesMainEntryProbeIntoSdTracePath() {
+    public void PackagedDebugLogging_DoesNotMountSdTraceProbeDuringStartup() {
         string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
         string mainSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "main.cpp"));
 
-        Assert.Contains("#include <fat.h>", mainSource, StringComparison.Ordinal);
-        Assert.Contains("fatInitDefault();", mainSource, StringComparison.Ordinal);
-        Assert.Contains("sd:/main_entry_trace.txt", mainSource, StringComparison.Ordinal);
-        Assert.Contains("std::fopen(\"sd:/main_entry_trace.txt\", \"ab\")", mainSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("#include <fat.h>", mainSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("fatInitDefault();", mainSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("sd:/main_entry_trace.txt", mainSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("std::fopen(\"sd:/main_entry_trace.txt\", \"ab\")", mainSource, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -332,13 +449,14 @@ public sealed class WiiRuntimeSourceTests {
     public void PackagedDiscFileSystem_UsesApploaderLoadedFstFromLowMemory() {
         string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
         string source = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiDiscFileSystem.cpp"));
-
         Assert.Contains("static constexpr uint32_t FstAddressLowMemoryAddress = 0x80000038u;", source, StringComparison.Ordinal);
         Assert.Contains("static constexpr uint32_t FstSizeLowMemoryAddress = 0x8000003Cu;", source, StringComparison.Ordinal);
         Assert.Contains("const uint32_t fstAddress = *reinterpret_cast<volatile uint32_t*>(FstAddressLowMemoryAddress);", source, StringComparison.Ordinal);
         Assert.Contains("const uint32_t fstSize = *reinterpret_cast<volatile uint32_t*>(FstSizeLowMemoryAddress);", source, StringComparison.Ordinal);
         Assert.Contains("const uint8_t* fstBytes = reinterpret_cast<const uint8_t*>(static_cast<uintptr_t>(fstAddress));", source, StringComparison.Ordinal);
         Assert.Contains("FstBytes.assign(fstBytes, fstBytes + fstSize);", source, StringComparison.Ordinal);
+        Assert.Contains("bool CaptureFstSnapshotFromLowMemory() {", source, StringComparison.Ordinal);
+        Assert.Contains("if (FstBytes.empty() && !CaptureFstSnapshotFromLowMemory()) {", source, StringComparison.Ordinal);
         Assert.DoesNotContain("ReadDiscRange(discHeader, 0U, DiscHeaderReadLength)", source, StringComparison.Ordinal);
         Assert.DoesNotContain("const uint32_t fstOffsetWords = ReadBigEndianU32(discHeader + 0x424);", source, StringComparison.Ordinal);
     }
@@ -415,10 +533,14 @@ public sealed class WiiRuntimeSourceTests {
         Assert.Contains("0x80000034u", apploaderSource, StringComparison.Ordinal);
         Assert.Contains("0x80000038u", apploaderSource, StringComparison.Ordinal);
         Assert.Contains("0x8000003Cu", apploaderSource, StringComparison.Ordinal);
+        Assert.Contains("static constexpr uint32_t ArenaHighReserveBytes = 0x20u;", apploaderSource, StringComparison.Ordinal);
         Assert.Contains("Config.CurrentRequestIndex == Config.RequestCount", apploaderSource, StringComparison.Ordinal);
         Assert.Contains("const uint EntryPointAddress = 0x81200000U;", apploaderImageBuilderSource, StringComparison.Ordinal);
         Assert.Contains(". = 0x81200000;", apploaderLinkerScript, StringComparison.Ordinal);
         Assert.Contains("reinterpret_cast<volatile uint32_t*>(ArenaHighLowMemoryAddress)", apploaderSource, StringComparison.Ordinal);
+        Assert.Contains("const uint32_t reservedArenaHighAddress = Config.FstLoadAddress >= ArenaHighReserveBytes", apploaderSource, StringComparison.Ordinal);
+        Assert.Contains("? (Config.FstLoadAddress - ArenaHighReserveBytes) & ~0x1Fu", apploaderSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("*reinterpret_cast<volatile uint32_t*>(ArenaHighLowMemoryAddress) = Config.FstLoadAddress;", apploaderSource, StringComparison.Ordinal);
         Assert.Contains("*(.data*)", apploaderLinkerScript, StringComparison.Ordinal);
         Assert.Contains("*(.bss*)", apploaderLinkerScript, StringComparison.Ordinal);
     }

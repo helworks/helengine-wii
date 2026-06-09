@@ -1,7 +1,16 @@
 #include "platform/wii/WiiRenderManager3D.hpp"
 
+#include <algorithm>
+
+#include "CameraClearSettings.hpp"
+#include "CameraComponent.hpp"
+#include "Core.hpp"
+#include "Entity.hpp"
+#include "ICamera.hpp"
+#include "ObjectManager.hpp"
 #include "RendererBackendCapabilityProfile.hpp"
 #include "platform/wii/WiiRenderManager2D.hpp"
+#include "runtime/native_cast.hpp"
 #include "runtime/native_exceptions.hpp"
 
 namespace helengine::wii {
@@ -9,7 +18,9 @@ namespace helengine::wii {
     WiiRenderManager3D::WiiRenderManager3D()
         : RenderManager3D()
         , CapabilityProfile(new RendererBackendCapabilityProfile(true, false, false, false, 0, 0))
-        , OverlayRenderManager2D(nullptr) {
+        , OverlayRenderManager2D(nullptr)
+        , PresentedClearColor { 0x00, 0x00, 0x00, 0xFF }
+        , PresentedClearColorValid(false) {
     }
 
     /// Releases the Wii 3D render bridge.
@@ -76,6 +87,7 @@ namespace helengine::wii {
             throw new InvalidOperationException("WiiRenderManager3D requires an overlay WiiRenderManager2D before Draw().");
         }
 
+        UpdatePresentedClearColorFromActiveCameras();
         OverlayRenderManager2D->Draw();
     }
 
@@ -96,5 +108,57 @@ namespace helengine::wii {
     /// Reports whether this backend has emitted a native scene frame.
     bool WiiRenderManager3D::HasRenderedScene() const {
         return false;
+    }
+
+    /// Returns whether the current frame resolved one authored camera clear color for presentation.
+    bool WiiRenderManager3D::HasPresentedClearColor() const {
+        return PresentedClearColorValid;
+    }
+
+    /// Returns the authored camera clear color resolved for the current presented frame.
+    GXColor WiiRenderManager3D::GetPresentedClearColor() const {
+        return PresentedClearColor;
+    }
+
+    /// Refreshes the current presented clear color from the active authored camera set.
+    void WiiRenderManager3D::UpdatePresentedClearColorFromActiveCameras() {
+        PresentedClearColorValid = false;
+
+        Core* core = Core::get_Instance();
+        if (core == nullptr || core->get_ObjectManager() == nullptr) {
+            return;
+        }
+
+        List<ICamera*>* cameras = core->get_ObjectManager()->get_Cameras();
+        for (int32_t cameraIndex = 0; cameraIndex < cameras->get_Count(); cameraIndex++) {
+            CameraComponent* camera = he_cpp_try_cast<CameraComponent>((*cameras)[cameraIndex]);
+            if (camera == nullptr || camera->get_Parent() == nullptr || !camera->get_Parent()->get_IsHierarchyEnabled()) {
+                continue;
+            }
+
+            CameraClearSettings clearSettings = camera->get_ClearSettings();
+            if (!clearSettings.get_ClearColorEnabled()) {
+                continue;
+            }
+
+            PresentedClearColor = ToGxColor(clearSettings.get_ClearColor());
+            PresentedClearColorValid = true;
+        }
+    }
+
+    /// Converts one normalized engine color into the byte GX color contract used by the copy clear path.
+    GXColor WiiRenderManager3D::ToGxColor(float4 color) {
+        return GXColor {
+            ConvertNormalizedColorChannel(color.X),
+            ConvertNormalizedColorChannel(color.Y),
+            ConvertNormalizedColorChannel(color.Z),
+            ConvertNormalizedColorChannel(color.W)
+        };
+    }
+
+    /// Converts one normalized engine color channel into the byte GX range expected by the Wii renderer.
+    uint8_t WiiRenderManager3D::ConvertNormalizedColorChannel(float value) {
+        const double clampedValue = std::clamp(static_cast<double>(value), 0.0, 1.0);
+        return static_cast<uint8_t>((clampedValue * 255.0) + 0.5);
     }
 }

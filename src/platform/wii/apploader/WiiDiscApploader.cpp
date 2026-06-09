@@ -6,11 +6,12 @@ extern "C" {
         static constexpr uint32_t FstSizeLowMemoryAddress = 0x8000003Cu;
         static constexpr uint32_t BootInfoVersionLowMemoryAddress = 0x80000024u;
         static constexpr uint32_t PhysicalMemorySizeLowMemoryAddress = 0x80000028u;
-        static constexpr uint32_t SimulatedMemorySizeLowMemoryAddress = 0x800000F0u;
-        static constexpr uint32_t Bi2LowMemoryAddress = 0x800000F4u;
-        static constexpr uint32_t DiscLayerStateLowMemoryAddress = 0x8000319Cu;
-        static constexpr uint32_t Bi2HeaderDiscOffsetWords = 0x110u;
-        static constexpr bool EnableApploaderReportTracing = true;
+    static constexpr uint32_t SimulatedMemorySizeLowMemoryAddress = 0x800000F0u;
+    static constexpr uint32_t Bi2LowMemoryAddress = 0x800000F4u;
+    static constexpr uint32_t DiscLayerStateLowMemoryAddress = 0x8000319Cu;
+    static constexpr uint32_t Bi2HeaderDiscOffsetWords = 0x110u;
+    static constexpr uint32_t ArenaHighReserveBytes = 0x20u;
+    static constexpr bool EnableApploaderReportTracing = true;
 
     struct ApploaderLoadRequest {
         uint32_t DestinationAddress;
@@ -184,7 +185,10 @@ extern "C" {
 
     static uint32_t ApploaderClose() {
         if (Config.FstLoadAddress != 0u && Config.FstSize != 0u) {
-            *reinterpret_cast<volatile uint32_t*>(ArenaHighLowMemoryAddress) = Config.FstLoadAddress;
+            const uint32_t reservedArenaHighAddress = Config.FstLoadAddress >= ArenaHighReserveBytes
+                ? (Config.FstLoadAddress - ArenaHighReserveBytes) & ~0x1Fu
+                : Config.FstLoadAddress;
+            *reinterpret_cast<volatile uint32_t*>(ArenaHighLowMemoryAddress) = reservedArenaHighAddress;
             *reinterpret_cast<volatile uint32_t*>(FstAddressLowMemoryAddress) = Config.FstLoadAddress;
             *reinterpret_cast<volatile uint32_t*>(FstSizeLowMemoryAddress) = Config.FstSize;
         }
