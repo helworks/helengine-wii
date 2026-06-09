@@ -250,6 +250,52 @@ public sealed class WiiRuntimeSourceTests {
     }
 
     /// <summary>
+    /// Ensures the Wii input backend polls both Wii Remote and GameCube controller paths and maps sideways Wii Remote buttons into the shared logical gamepad contract.
+    /// </summary>
+    [Fact]
+    public void PackagedInput_UsesWiiRemoteSidewaysMappingWithGameCubeFallback() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string inputHeaderSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiInputManager.hpp"));
+        string inputSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiInputManager.cpp"));
+
+        Assert.Contains("#include <wiiuse/wpad.h>", inputSource, StringComparison.Ordinal);
+        Assert.Contains("WPAD_Init();", inputSource, StringComparison.Ordinal);
+        Assert.Contains("WPAD_SetDataFormat(WPAD_CHAN_0, WPAD_FMT_BTNS);", inputSource, StringComparison.Ordinal);
+        Assert.Contains("WPAD_ScanPads();", inputSource, StringComparison.Ordinal);
+        Assert.Contains("const u32 wiiButtonsHeld = WPAD_ButtonsHeld(WPAD_CHAN_0);", inputSource, StringComparison.Ordinal);
+        Assert.Contains("gamepadState.SetButtonDown(InputGamepadButton::DPadUp, (wiiButtonsHeld & WPAD_BUTTON_UP) != 0);", inputSource, StringComparison.Ordinal);
+        Assert.Contains("gamepadState.SetButtonDown(InputGamepadButton::DPadDown, (wiiButtonsHeld & WPAD_BUTTON_DOWN) != 0);", inputSource, StringComparison.Ordinal);
+        Assert.Contains("gamepadState.SetButtonDown(InputGamepadButton::DPadLeft, (wiiButtonsHeld & WPAD_BUTTON_LEFT) != 0);", inputSource, StringComparison.Ordinal);
+        Assert.Contains("gamepadState.SetButtonDown(InputGamepadButton::DPadRight, (wiiButtonsHeld & WPAD_BUTTON_RIGHT) != 0);", inputSource, StringComparison.Ordinal);
+        Assert.Contains("gamepadState.SetButtonDown(InputGamepadButton::South, (wiiButtonsHeld & WPAD_BUTTON_2) != 0);", inputSource, StringComparison.Ordinal);
+        Assert.Contains("gamepadState.SetButtonDown(InputGamepadButton::East, (wiiButtonsHeld & WPAD_BUTTON_1) != 0);", inputSource, StringComparison.Ordinal);
+        Assert.Contains("gamepadState.SetButtonDown(InputGamepadButton::Start, (wiiButtonsHeld & WPAD_BUTTON_PLUS) != 0);", inputSource, StringComparison.Ordinal);
+        Assert.Contains("gamepadState.SetButtonDown(InputGamepadButton::Select, (wiiButtonsHeld & WPAD_BUTTON_MINUS) != 0);", inputSource, StringComparison.Ordinal);
+        Assert.Contains("const u16 heldButtons = PAD_ButtonsHeld(0);", inputSource, StringComparison.Ordinal);
+        Assert.Contains("PAD_ScanPads();", inputSource, StringComparison.Ordinal);
+        Assert.Contains("InputFrameState CaptureFrame() override;", inputHeaderSource, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ensures Wii startup installs standard-platform Accept and Return bindings so the authored menu can confirm and navigate back through the shared action layer.
+    /// </summary>
+    [Fact]
+    public void PackagedInput_ConfiguresStandardAcceptAndReturnBindingsForMenuActions() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string applicationSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiApplication.cpp"));
+
+        Assert.Contains("#include \"StandardPlatformInputConfiguration.hpp\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("#include \"StandardPlatformActionBinding.hpp\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("#include \"StandardPlatformAction.hpp\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("#include \"InputControlId.hpp\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("#include \"InputDeviceKind.hpp\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("#include \"InputControlKind.hpp\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("options->StandardPlatformInputConfiguration = new StandardPlatformInputConfiguration(", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("new StandardPlatformActionBinding(StandardPlatformAction::Accept, InputControlId(InputDeviceKind::Gamepad, InputControlKind::Button, 0, static_cast<int32_t>(InputGamepadButton::South)))", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("new StandardPlatformActionBinding(StandardPlatformAction::Return, InputControlId(InputDeviceKind::Gamepad, InputControlKind::Button, 0, static_cast<int32_t>(InputGamepadButton::East)))", applicationSource, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Ensures Wii textured UI quads remap logical UVs onto GC-style 4-pixel padded GX texture dimensions instead of power-of-two expansion.
     /// </summary>
     [Fact]

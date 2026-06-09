@@ -16,15 +16,23 @@
 #if HELENGINE_WII_HAS_GENERATED_CORE
 #include "Core.hpp"
 #include "CoreInitializationOptions.hpp"
+#include "InputControlId.hpp"
+#include "InputControlKind.hpp"
+#include "InputDeviceKind.hpp"
+#include "InputGamepadButton.hpp"
 #include "PlatformInfo.hpp"
 #include "RuntimeSceneLoadService.hpp"
 #include "SceneManager.hpp"
 #include "SceneLoadMode.hpp"
+#include "StandardPlatformAction.hpp"
+#include "StandardPlatformActionBinding.hpp"
+#include "StandardPlatformInputConfiguration.hpp"
 #include "platform/wii/WiiInputManager.hpp"
 #include "platform/wii/WiiRenderManager2D.hpp"
 #include "platform/wii/WiiRenderManager3D.hpp"
 #include "platform/wii/WiiSceneBootstrap.hpp"
 #include "runtime/native_exceptions.hpp"
+#include "runtime/native_list.hpp"
 #endif
 
 namespace helengine::wii {
@@ -378,6 +386,10 @@ namespace helengine::wii {
             options->UpdateListInitialCapacity = 64;
             options->RenderList2DInitialCapacity = 64;
             options->RenderList3DInitialCapacity = 64;
+            options->StandardPlatformInputConfiguration = new StandardPlatformInputConfiguration(new List<StandardPlatformActionBinding*>({
+                new StandardPlatformActionBinding(StandardPlatformAction::Accept, InputControlId(InputDeviceKind::Gamepad, InputControlKind::Button, 0, static_cast<int32_t>(InputGamepadButton::South))),
+                new StandardPlatformActionBinding(StandardPlatformAction::Return, InputControlId(InputDeviceKind::Gamepad, InputControlKind::Button, 0, static_cast<int32_t>(InputGamepadButton::East)))
+            }));
 
             initializationStage = "ConstructBridgeServices";
             SetBootPhase(WiiBootPhase::BridgeConstruction, GXColor { 0x00, 0xFF, 0xFF, 0xFF });
