@@ -15,6 +15,26 @@ public static class WiiPlatformDefinitionFactory {
     const string NativeNumericTypeRemaps = "System.Numerics.Vector2=helengine.float2;System.Numerics.Vector3=helengine.float3;System.Numerics.Vector4=helengine.float4;System.Numerics.Quaternion=helengine.float4";
 
     /// <summary>
+    /// Generic generated-math-convention value that instructs the shared C++ generator to emit native column-vector math helpers.
+    /// </summary>
+    const string NativeColumnVectorMathConvention = "native-column-vector";
+
+    /// <summary>
+    /// Generic pointer-size contract forwarded to the shared C++ generator for Wii-native output.
+    /// </summary>
+    const string WiiPointerSizeInBytes = "4";
+
+    /// <summary>
+    /// Generic native file-system header contract forwarded to the shared C++ generator so packaged-disc file access routes through the Wii disc bridge without generated-source rewrites.
+    /// </summary>
+    const string WiiNativeFileSystemHeader = "\"platform/wii/WiiDiscFileSystem.hpp\"";
+
+    /// <summary>
+    /// Generic native file-system type contract forwarded to the shared C++ generator so packaged-disc file access routes through the Wii disc bridge without generated-source rewrites.
+    /// </summary>
+    const string WiiNativeFileSystemType = "helengine::wii::WiiDiscFileSystem";
+
+    /// <summary>
     /// Creates the serialized default Wii texture settings contract used when assets do not provide an explicit Wii override.
     /// </summary>
     /// <returns>Serialized default Wii texture settings.</returns>
@@ -247,10 +267,38 @@ public static class WiiPlatformDefinitionFactory {
                             true,
                             []),
                         new PlatformSettingDefinition(
+                            "generated-math-convention",
+                            "Generated Math Convention",
+                            PlatformSettingKind.Text,
+                            NativeColumnVectorMathConvention,
+                            true,
+                            []),
+                        new PlatformSettingDefinition(
+                            "pointer-size-bytes",
+                            "Pointer Size (Bytes)",
+                            PlatformSettingKind.Text,
+                            WiiPointerSizeInBytes,
+                            true,
+                            []),
+                        new PlatformSettingDefinition(
                             "type-remaps",
                             "Type Remaps",
                             PlatformSettingKind.Text,
                             NativeNumericTypeRemaps,
+                            true,
+                            []),
+                        new PlatformSettingDefinition(
+                            "native-file-system-header",
+                            "Native File System Header",
+                            PlatformSettingKind.Text,
+                            WiiNativeFileSystemHeader,
+                            true,
+                            []),
+                        new PlatformSettingDefinition(
+                            "native-file-system-type",
+                            "Native File System Type",
+                            PlatformSettingKind.Text,
+                            WiiNativeFileSystemType,
                             true,
                             [])
                     ])

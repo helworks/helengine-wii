@@ -32,6 +32,7 @@ public sealed class WiiPackagedBuildWorkspaceTests {
             Directory.CreateDirectory(Path.GetDirectoryName(fontSourcePath) ?? throw new InvalidOperationException("Font directory path could not be resolved."));
             Directory.CreateDirectory(Path.GetDirectoryName(defaultFontSourcePath) ?? throw new InvalidOperationException("Default font directory path could not be resolved."));
             Directory.CreateDirectory(generatedCoreRootPath);
+            WriteGeneratedRuntimeSupportSources(generatedCoreRootPath);
             await File.WriteAllTextAsync(sceneSourcePath, "scene");
             WriteFontAsset(fontSourcePath, CreateExternalCookedAtlasFontAsset("Fonts/DemoDiscBody", "cooked/fonts/DemoDiscBody.ps2tex"));
             WriteFontAsset(defaultFontSourcePath, CreateEmbeddedAtlasFontAsset("fonts/default.hefont"));
@@ -115,7 +116,13 @@ public sealed class WiiPackagedBuildWorkspaceTests {
             Assert.True(File.Exists(Path.Combine(outputRootPath, "game.iso")));
             Assert.True(File.Exists(Path.Combine(generatedCoreRootPath, "runtime", "wii_runtime_scene_manifest.hpp")));
             string runtimeManifestSource = File.ReadAllText(Path.Combine(generatedCoreRootPath, "runtime", "wii_runtime_scene_manifest.inl"));
-            Assert.Contains("\"files/cooked/scenes/demodiscmainmenu.hasset\"", runtimeManifestSource, StringComparison.Ordinal);
+            Assert.Contains("\"cooked/scenes/demodiscmainmenu.hasset\"", runtimeManifestSource, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"files/cooked/scenes/demodiscmainmenu.hasset\"", runtimeManifestSource, StringComparison.Ordinal);
+            string generatedFileSource = File.ReadAllText(Path.Combine(generatedCoreRootPath, "system", "io", "file.cpp"));
+            string generatedPathSource = File.ReadAllText(Path.Combine(generatedCoreRootPath, "system", "io", "path.cpp"));
+            Assert.Contains("#if HE_CPP_RUNTIME_HAS_CUSTOM_FILE_SYSTEM", generatedFileSource, StringComparison.Ordinal);
+            Assert.Contains("HE_CPP_RUNTIME_CUSTOM_FILE_SYSTEM_TYPE::OpenRead(filePath)", generatedFileSource, StringComparison.Ordinal);
+            Assert.Contains("IsWiiDevicePath", generatedPathSource, StringComparison.Ordinal);
 
             using FileStream defaultFontStream = new FileStream(Path.Combine(outputRootPath, "disc", "files", "cooked", "fonts", "default.hefont"), FileMode.Open, FileAccess.Read, FileShare.Read);
             FontAsset stagedDefaultFont = FilesFontAssetBinarySerializer.Deserialize(defaultFontStream);
@@ -288,5 +295,157 @@ public sealed class WiiPackagedBuildWorkspaceTests {
         string directoryPath = Path.GetDirectoryName(fullPath) ?? throw new InvalidOperationException("Output directory path could not be resolved.");
         Directory.CreateDirectory(directoryPath);
         File.WriteAllText(fullPath, contents);
+    }
+
+    /// <summary>
+    /// Seeds one generated-core tree with the generic native runtime support files that the packaged Wii build must adapt before native compilation.
+    /// </summary>
+    /// <param name="generatedCoreRootPath">Generated-core root that receives the generic source files.</param>
+    static void WriteGeneratedRuntimeSupportSources(string generatedCoreRootPath) {
+        WriteFile(generatedCoreRootPath, Path.Combine("system", "io", "file.cpp"), """
+#include "file.hpp"
+
+#include "helcpp_config.hpp"
+
+#if HE_CPP_RUNTIME_HAS_CUSTOM_FILE_SYSTEM
+#include HE_CPP_RUNTIME_CUSTOM_FILE_SYSTEM_HEADER
+#endif
+
+#include <fstream>
+
+bool File::Exists(const char* fileName) {
+	if (!fileName)
+	{
+		return false;
+	}
+
+#if HE_CPP_RUNTIME_HAS_CUSTOM_FILE_SYSTEM
+	if (HE_CPP_RUNTIME_CUSTOM_FILE_SYSTEM_TYPE::CanHandlePath(fileName)) {
+		return HE_CPP_RUNTIME_CUSTOM_FILE_SYSTEM_TYPE::Exists(fileName);
+	}
+#endif
+
+	std::ifstream file(fileName);
+	return file.good();
+}
+
+FileStream* File::OpenRead(const char* filePath)
+{
+#if HE_CPP_RUNTIME_HAS_CUSTOM_FILE_SYSTEM
+	if (HE_CPP_RUNTIME_CUSTOM_FILE_SYSTEM_TYPE::CanHandlePath(filePath)) {
+		return HE_CPP_RUNTIME_CUSTOM_FILE_SYSTEM_TYPE::OpenRead(filePath);
+	}
+#endif
+
+	return new FileStream(filePath, FileMode::Open, FileAccess::Read, FileShare::Read);
+}
+""");
+        WriteFile(generatedCoreRootPath, Path.Combine("system", "io", "file-stream.cpp"), """
+#include "file-stream.hpp"
+#include <stdexcept>  // For exceptions
+#include <cstring>    // For std::memcpy
+#include <sys/stat.h> // For file size retrieval
+
+FileStream::FileStream(const char* path, FileMode mode)
+    : file(nullptr), memoryBuffer(), position(0), length(0), ownsMemoryBuffer(false), writable(true) {
+    file = std::fopen(path, GetFileMode(mode));
+    if (!file) {
+        throw std::runtime_error(std::string("Failed to open file: ") + path);
+    }
+
+    UpdateLength();
+}
+""");
+        WriteFile(generatedCoreRootPath, Path.Combine("system", "io", "path.cpp"), """
+#include "path.hpp"
+
+#include "helcpp_config.hpp"
+
+#include <algorithm>
+#include <filesystem>
+
+#if HELENGINE_NINTENDO_DS_HAS_GENERATED_CORE
+namespace {
+    bool IsNintendoDsDevicePath(const std::string& path) {
+        return path.rfind("nitro:", 0) == 0;
+    }
+}
+#endif
+
+std::string Path::Combine(const std::string& left, const std::string& right) {
+#if HELENGINE_NINTENDO_DS_HAS_GENERATED_CORE
+    if (IsNintendoDsDevicePath(left)) {
+        if (right.empty()) {
+            return left;
+        }
+
+        if (right[0] == '/') {
+            return left + right;
+        }
+
+        return left + "/" + right;
+    }
+#endif
+    if (left.empty()) {
+        return right;
+    }
+
+    if (right.empty()) {
+        return left;
+    }
+
+    return (std::filesystem::path(left) / right).lexically_normal().string();
+}
+
+std::string Path::GetDirectoryName(const std::string& path) {
+    if (path.empty()) {
+        return std::string();
+    }
+
+    return std::filesystem::path(path).parent_path().string();
+}
+
+std::string Path::GetFileName(const std::string& path) {
+    if (path.empty()) {
+        return std::string();
+    }
+
+    return std::filesystem::path(path).filename().string();
+}
+
+std::string Path::GetFullPath(const std::string& path) {
+#if HELENGINE_NINTENDO_DS_HAS_GENERATED_CORE
+    if (IsNintendoDsDevicePath(path)) {
+        return path;
+    }
+#endif
+#if !HE_CPP_PLATFORM_IS_WINDOWS_HOST
+    if (path.empty()) {
+        return std::string(".");
+    }
+
+    return std::filesystem::path(path).lexically_normal().string();
+#else
+    if (path.empty()) {
+        return std::filesystem::current_path().string();
+    }
+
+    return std::filesystem::absolute(std::filesystem::path(path)).lexically_normal().string();
+#endif
+}
+
+bool Path::IsPathRooted(const std::string& path) {
+    if (path.empty()) {
+        return false;
+    }
+
+#if HELENGINE_NINTENDO_DS_HAS_GENERATED_CORE
+    if (IsNintendoDsDevicePath(path)) {
+        return true;
+    }
+#endif
+    return std::filesystem::path(path).is_absolute();
+}
+""");
     }
 }

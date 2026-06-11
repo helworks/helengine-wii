@@ -434,14 +434,15 @@ public sealed class WiiRuntimeSourceTests {
         string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
         string discFileSystemHeaderPath = Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiDiscFileSystem.hpp");
         string discFileSystemSourcePath = Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiDiscFileSystem.cpp");
-        string generatedFileSourcePath = Path.Combine(repositoryRootPath, "tmp", "generated-core-wii", "system", "io", "file.cpp");
+        string platformDefinitionFactoryPath = Path.Combine(repositoryRootPath, "builder", "WiiPlatformDefinitionFactory.cs");
 
         Assert.True(File.Exists(discFileSystemHeaderPath), "Expected WiiDiscFileSystem.hpp to exist.");
         Assert.True(File.Exists(discFileSystemSourcePath), "Expected WiiDiscFileSystem.cpp to exist.");
+        Assert.True(File.Exists(platformDefinitionFactoryPath), "Expected WiiPlatformDefinitionFactory.cs to exist.");
 
         string discFileSystemHeaderSource = File.ReadAllText(discFileSystemHeaderPath);
         string discFileSystemSource = File.ReadAllText(discFileSystemSourcePath);
-        string generatedFileSource = File.ReadAllText(generatedFileSourcePath);
+        string platformDefinitionFactorySource = File.ReadAllText(platformDefinitionFactoryPath);
 
         Assert.Contains("class WiiDiscFileSystem", discFileSystemHeaderSource, StringComparison.Ordinal);
         Assert.Contains("static bool CanHandlePath(const char* path);", discFileSystemHeaderSource, StringComparison.Ordinal);
@@ -449,10 +450,10 @@ public sealed class WiiRuntimeSourceTests {
         Assert.Contains("static FileStream* OpenRead(const char* path);", discFileSystemHeaderSource, StringComparison.Ordinal);
         Assert.Contains("DI_Read(", discFileSystemSource, StringComparison.Ordinal);
         Assert.Contains("<< 2U", discFileSystemSource, StringComparison.Ordinal);
-        Assert.Contains("#include \"platform/wii/WiiDiscFileSystem.hpp\"", generatedFileSource, StringComparison.Ordinal);
-        Assert.Contains("helengine::wii::WiiDiscFileSystem::CanHandlePath(fileName)", generatedFileSource, StringComparison.Ordinal);
-        Assert.Contains("helengine::wii::WiiDiscFileSystem::Exists(fileName)", generatedFileSource, StringComparison.Ordinal);
-        Assert.Contains("helengine::wii::WiiDiscFileSystem::OpenRead(filePath)", generatedFileSource, StringComparison.Ordinal);
+        Assert.Contains("native-file-system-header", platformDefinitionFactorySource, StringComparison.Ordinal);
+        Assert.Contains("WiiNativeFileSystemHeader = \"\\\"platform/wii/WiiDiscFileSystem.hpp\\\"\"", platformDefinitionFactorySource, StringComparison.Ordinal);
+        Assert.Contains("native-file-system-type", platformDefinitionFactorySource, StringComparison.Ordinal);
+        Assert.Contains("helengine::wii::WiiDiscFileSystem", platformDefinitionFactorySource, StringComparison.Ordinal);
     }
 
     /// <summary>
