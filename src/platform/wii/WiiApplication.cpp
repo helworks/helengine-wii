@@ -314,6 +314,7 @@ namespace helengine::wii {
         GX_SetDispCopyDst(RenderMode->fbWidth, RenderMode->xfbHeight);
         GX_SetCopyFilter(RenderMode->aa, RenderMode->sample_pattern, GX_TRUE, RenderMode->vfilter);
         GX_SetFieldMode(RenderMode->field_rendering, ((RenderMode->viHeight == (RenderMode->xfbHeight * 2)) ? GX_ENABLE : GX_DISABLE));
+        GX_SetPixelFmt(GX_PF_RGBA6_Z24, GX_ZC_LINEAR);
         GX_SetCullMode(GX_CULL_NONE);
         GX_SetDispCopyGamma(GX_GM_1_0);
         GX_SetNumChans(1);
@@ -404,6 +405,7 @@ namespace helengine::wii {
             const uint16_t logicalFrameWidth = ResolveLogicalFrameWidth();
             const uint16_t logicalFrameHeight = ResolveLogicalFrameHeight();
             EngineRenderManager3D->AddWindow(0, logicalFrameWidth, logicalFrameHeight);
+            EngineRenderManager3D->SetPresentedFrameSize(static_cast<uint16_t>(RenderMode->fbWidth), static_cast<uint16_t>(RenderMode->efbHeight));
 
             initializationStage = "InitializeCore";
             EngineCore->Initialize(EngineRenderManager3D, EngineRenderManager2D, EngineInputManager, EnginePlatformInfo, options);

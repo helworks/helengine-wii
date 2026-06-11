@@ -1,34 +1,66 @@
 #include "platform/wii/WiiRenderManager3D.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 
+#include <ogc/system.h>
+
+#include "Asset.hpp"
+#include "AssetSerializer.hpp"
 #include "CameraClearSettings.hpp"
-#include "CameraComponent.hpp"
-#include "Core.hpp"
-#include "Entity.hpp"
-#include "ICamera.hpp"
-#include "ObjectManager.hpp"
+#include "MaterialBlendMode.hpp"
+#include "MaterialCullMode.hpp"
+#include "MaterialRenderState.hpp"
+#include "ModelAsset.hpp"
+#include "ModelAssetIndexData.hpp"
+#include "ModelSubmeshAsset.hpp"
+#include "ModelSubmeshResolver.hpp"
+#include "PlatformMaterialAsset.hpp"
 #include "RendererBackendCapabilityProfile.hpp"
+#include "RuntimeMaterial.hpp"
+#include "RuntimeMaterialLightingModel.hpp"
+#include "RuntimeSubmesh.hpp"
+#include "float2.hpp"
+#include "float3.hpp"
+#include "float4.hpp"
+#include "platform/wii/WiiFramePlan.hpp"
+#include "platform/wii/WiiMeshCache.hpp"
+#include "platform/wii/WiiRasterRenderer.hpp"
 #include "platform/wii/WiiRenderManager2D.hpp"
+#include "platform/wii/WiiRuntimeModel.hpp"
+#include "platform/wii/WiiSceneRenderBridge.hpp"
+#include "runtime/array.hpp"
+#include "runtime/finally.hpp"
 #include "runtime/native_cast.hpp"
 #include "runtime/native_exceptions.hpp"
+#include "system/io/file.hpp"
 
 namespace helengine::wii {
-    /// Creates the Wii 3D render bridge.
+    /// Creates the Wii 3D backend and its owned bridge/cache/raster collaborators.
     WiiRenderManager3D::WiiRenderManager3D()
         : RenderManager3D()
         , CapabilityProfile(new RendererBackendCapabilityProfile(true, false, false, false, 0, 0))
+        , SceneRenderBridge(new WiiSceneRenderBridge())
+        , MeshCache(new WiiMeshCache())
+        , RasterRenderer(new WiiRasterRenderer(MeshCache))
         , OverlayRenderManager2D(nullptr)
+        , PresentedClearColorValid(false)
         , PresentedClearColor { 0x00, 0x00, 0x00, 0xFF }
-        , PresentedClearColorValid(false) {
+        , HasRenderedSceneValue(false)
+        , PresentedFrameWidth(0U)
+        , PresentedFrameHeight(0U)
+        , ExtractedFrameCount(0U) {
     }
 
-    /// Releases the Wii 3D render bridge.
+    /// Releases owned Wii renderer collaborators.
     WiiRenderManager3D::~WiiRenderManager3D() {
+        delete RasterRenderer;
+        delete MeshCache;
+        delete SceneRenderBridge;
         delete CapabilityProfile;
     }
 
-    /// Fails because material creation is outside the generated-core boot slice.
+    /// Rebuilds one legacy raw material asset path through the cooked platform-owned Wii material contract.
     RuntimeMaterial* WiiRenderManager3D::BuildMaterialFromRawAsset(ContentManager* assetContentManager, std::string contentRootPath, std::string materialAssetPath) {
         if (assetContentManager == nullptr) {
             throw new ArgumentNullException("assetContentManager");
@@ -42,53 +74,255 @@ namespace helengine::wii {
             throw new ArgumentException("Wii material asset path is required.", "materialAssetPath");
         }
 
-        throw new InvalidOperationException("Wii generated-core boot does not support material creation yet.");
+        return BuildMaterialFromCooked(materialAssetPath);
     }
 
-    /// Fails because raw model creation is outside the generated-core boot slice.
+    /// Builds a Wii runtime model that keeps authored submesh and geometry arrays alive.
     RuntimeModel* WiiRenderManager3D::BuildModelFromRaw(ModelAsset* data) {
         if (data == nullptr) {
             throw new ArgumentNullException("data");
         }
 
-        throw new InvalidOperationException("Wii generated-core boot does not support raw model creation yet.");
+        ModelAssetIndexData* indexData = ModelAssetIndexData::Resolve(data);
+        WiiRuntimeModel* runtimeModel = new WiiRuntimeModel();
+        runtimeModel->set_Id(data->get_Id());
+        runtimeModel->SetBounds(data->BoundsMin, data->BoundsMax);
+        runtimeModel->SetSubmeshes(ModelSubmeshResolver::BuildRuntimeSubmeshes(data));
+        runtimeModel->Positions = data->Positions;
+        runtimeModel->Normals = data->Normals;
+        runtimeModel->TexCoords = data->TexCoords;
+        runtimeModel->Indices16 = indexData->get_Indices16();
+        runtimeModel->Indices32 = indexData->get_Indices32();
+        runtimeModel->Uses32BitIndices = indexData->get_Uses32BitIndices();
+        SYS_Report(
+            "[Wii] RM3D build raw model id=%s positions=%u submeshes=%u ptr=%p\n",
+            data->get_Id().c_str(),
+            static_cast<unsigned>(runtimeModel->Positions != nullptr ? runtimeModel->Positions->get_Length() : 0),
+            static_cast<unsigned>(runtimeModel->get_Submeshes() != nullptr ? runtimeModel->get_Submeshes()->get_Length() : 0),
+            runtimeModel);
+        delete indexData;
+        return runtimeModel;
     }
 
-    /// Fails because cooked model loading is outside the generated-core boot slice.
+    /// Builds a Wii runtime model from one serialized cooked model asset path.
     RuntimeModel* WiiRenderManager3D::BuildModelFromCooked(std::string cookedAssetPath) {
         if (cookedAssetPath.empty()) {
             throw new ArgumentException("Wii cooked model path is required.", "cookedAssetPath");
         }
 
-        throw new InvalidOperationException("Wii generated-core boot does not support cooked model loading yet.");
+        FileStream* stream = File::OpenRead(cookedAssetPath.c_str());
+        try {
+            Asset* asset = AssetSerializer::Deserialize(stream);
+            ModelAsset* cookedModelAsset = he_cpp_try_cast<ModelAsset>(asset);
+            if (cookedModelAsset == nullptr) {
+                throw new ArgumentException("Wii cooked model payload did not deserialize as ModelAsset.", "cookedAssetPath");
+            }
+
+            stream->Dispose();
+            WiiRuntimeModel* runtimeModel = static_cast<WiiRuntimeModel*>(BuildModelFromRaw(cookedModelAsset));
+            runtimeModel->OwnedSourceModelAsset = cookedModelAsset;
+            SYS_Report(
+                "[Wii] RM3D build cooked model path=%s id=%s ptr=%p\n",
+                cookedAssetPath.c_str(),
+                cookedModelAsset->get_Id().c_str(),
+                runtimeModel);
+            return runtimeModel;
+        } catch (...) {
+            if (stream != nullptr) {
+                stream->Dispose();
+            }
+
+            throw;
+        }
     }
 
-    /// Releases one runtime material.
+    /// Rebuilds one cooked platform-owned material payload path into the shared runtime material contract used by generated scenes.
+    RuntimeMaterial* WiiRenderManager3D::BuildMaterialFromCooked(std::string cookedAssetPath) {
+        if (cookedAssetPath.empty()) {
+            throw new ArgumentException("Wii cooked material path is required.", "cookedAssetPath");
+        }
+
+        FileStream* stream = File::OpenRead(cookedAssetPath.c_str());
+        auto streamGuard = he_cpp_make_scope_exit([&]() {
+            if (stream != nullptr) {
+                stream->Dispose();
+                delete stream;
+            }
+        });
+        Asset* asset = AssetSerializer::Deserialize(stream);
+        PlatformMaterialAsset* materialAsset = he_cpp_try_cast<PlatformMaterialAsset>(asset);
+        if (materialAsset == nullptr) {
+            delete asset;
+            throw new InvalidOperationException("Wii cooked material payload did not deserialize into a PlatformMaterialAsset.");
+        }
+
+        auto materialAssetGuard = he_cpp_make_scope_exit([&]() {
+            delete materialAsset;
+        });
+        return BuildMaterialFromCooked(materialAsset);
+    }
+
+    /// Rebuilds one cooked platform-owned material payload into the minimal runtime contract currently consumed by generated scenes.
+    RuntimeMaterial* WiiRenderManager3D::BuildMaterialFromCooked(PlatformMaterialAsset* materialAsset) {
+        if (materialAsset == nullptr) {
+            throw new ArgumentNullException("materialAsset");
+        }
+
+        RuntimeMaterial* runtimeMaterial = new RuntimeMaterial();
+        runtimeMaterial->set_Id(materialAsset->get_Id());
+        runtimeMaterial->SetRenderState(BuildMaterialRenderState(materialAsset));
+        runtimeMaterial->set_LightingModel(materialAsset->Lit
+            ? RuntimeMaterialLightingModel::MetalRoughPbr
+            : RuntimeMaterialLightingModel::Unlit);
+        runtimeMaterial->set_SupportsNormalMapping(false);
+        runtimeMaterial->set_SupportsEmissive(false);
+        runtimeMaterial->set_CastsShadows(materialAsset->Lit);
+        runtimeMaterial->set_ReceivesShadows(materialAsset->Lit);
+        return runtimeMaterial;
+    }
+
+    /// Releases one Wii runtime material after the final scene reference is removed.
     void WiiRenderManager3D::ReleaseMaterial(RuntimeMaterial* material) {
         if (material == nullptr) {
             throw new ArgumentNullException("material");
         }
+
+        ReleasedMaterials.push_back(material);
     }
 
-    /// Releases one runtime model.
+    /// Releases one Wii runtime model after the final scene reference is removed.
     void WiiRenderManager3D::ReleaseModel(RuntimeModel* model) {
         if (model == nullptr) {
             throw new ArgumentNullException("model");
         }
+
+        ReleasedModels.push_back(model);
     }
 
-    /// Clears deferred release state after an engine frame.
+    /// Releases any deferred runtime-material and runtime-model deletions after the scene manager reaches a safe transition boundary.
     void WiiRenderManager3D::FlushReleasedAssets() {
+        for (RuntimeMaterial* material : ReleasedMaterials) {
+            if (material == nullptr) {
+                continue;
+            }
+
+            material->Dispose();
+            delete material;
+        }
+
+        ReleasedMaterials.clear();
+
+        for (RuntimeModel* model : ReleasedModels) {
+            if (model == nullptr) {
+                continue;
+            }
+
+            WiiRuntimeModel* runtimeModel = static_cast<WiiRuntimeModel*>(model);
+            ReleaseOwnedSourceModelAsset(runtimeModel);
+
+            Array<RuntimeSubmesh*>* submeshes = runtimeModel->get_Submeshes();
+            if (submeshes != nullptr && submeshes != Array<RuntimeSubmesh*>::Empty()) {
+                for (int32_t submeshIndex = 0; submeshIndex < submeshes->get_Length(); submeshIndex++) {
+                    delete (*submeshes)[submeshIndex];
+                }
+
+                delete submeshes;
+            }
+
+            if (runtimeModel->CachedMeshData != nullptr) {
+                if (runtimeModel->CachedMeshData->PackedPositions != nullptr && runtimeModel->CachedMeshData->PackedPositions != Array<WiiPackedPosition3>::Empty()) {
+                    delete runtimeModel->CachedMeshData->PackedPositions;
+                }
+
+                if (runtimeModel->CachedMeshData->PackedPositionBuffer != nullptr) {
+                    free(runtimeModel->CachedMeshData->PackedPositionBuffer);
+                }
+
+                if (runtimeModel->CachedMeshData->PackedNormals != nullptr && runtimeModel->CachedMeshData->PackedNormals != Array<WiiPackedNormal3>::Empty()) {
+                    delete runtimeModel->CachedMeshData->PackedNormals;
+                }
+
+                if (runtimeModel->CachedMeshData->PackedNormalBuffer != nullptr) {
+                    free(runtimeModel->CachedMeshData->PackedNormalBuffer);
+                }
+
+                if (runtimeModel->CachedMeshData->PackedTexCoords != nullptr && runtimeModel->CachedMeshData->PackedTexCoords != Array<WiiPackedTexCoord2>::Empty()) {
+                    delete runtimeModel->CachedMeshData->PackedTexCoords;
+                }
+
+                if (runtimeModel->CachedMeshData->PackedTexCoordBuffer != nullptr) {
+                    free(runtimeModel->CachedMeshData->PackedTexCoordBuffer);
+                }
+
+                if (runtimeModel->CachedMeshData->Indices16 != nullptr && runtimeModel->CachedMeshData->Indices16 != Array<uint16_t>::Empty()) {
+                    delete runtimeModel->CachedMeshData->Indices16;
+                }
+
+                if (runtimeModel->CachedMeshData->SubmeshIndexStarts != nullptr && runtimeModel->CachedMeshData->SubmeshIndexStarts != Array<int32_t>::Empty()) {
+                    delete runtimeModel->CachedMeshData->SubmeshIndexStarts;
+                }
+
+                if (runtimeModel->CachedMeshData->SubmeshIndexCounts != nullptr && runtimeModel->CachedMeshData->SubmeshIndexCounts != Array<int32_t>::Empty()) {
+                    delete runtimeModel->CachedMeshData->SubmeshIndexCounts;
+                }
+
+                delete runtimeModel->CachedMeshData;
+            }
+
+            if (runtimeModel->Positions != nullptr && runtimeModel->Positions != Array<float3>::Empty()) {
+                delete runtimeModel->Positions;
+            }
+
+            if (runtimeModel->Normals != nullptr && runtimeModel->Normals != Array<float3>::Empty()) {
+                delete runtimeModel->Normals;
+            }
+
+            if (runtimeModel->TexCoords != nullptr && runtimeModel->TexCoords != Array<float2>::Empty()) {
+                delete runtimeModel->TexCoords;
+            }
+
+            if (runtimeModel->Indices16 != nullptr && runtimeModel->Indices16 != Array<uint16_t>::Empty()) {
+                delete runtimeModel->Indices16;
+            }
+
+            if (runtimeModel->Indices32 != nullptr && runtimeModel->Indices32 != Array<uint32_t>::Empty()) {
+                delete runtimeModel->Indices32;
+            }
+
+            delete runtimeModel;
+        }
+
+        ReleasedModels.clear();
     }
 
-    /// Runs the generated draw path without native scene rasterization.
+    /// Extracts the current frame and renders it through GX.
     void WiiRenderManager3D::Draw() {
         if (OverlayRenderManager2D == nullptr) {
             throw new InvalidOperationException("WiiRenderManager3D requires an overlay WiiRenderManager2D before Draw().");
+        } else if (PresentedFrameWidth == 0U) {
+            throw new InvalidOperationException("WiiRenderManager3D requires one presented framebuffer width before Draw().");
+        } else if (PresentedFrameHeight == 0U) {
+            throw new InvalidOperationException("WiiRenderManager3D requires one presented framebuffer height before Draw().");
         }
 
-        UpdatePresentedClearColorFromActiveCameras();
         OverlayRenderManager2D->Draw();
+        WiiFramePlan* framePlan = SceneRenderBridge->BuildFramePlan(CapabilityProfile, MainWindowSize.X, MainWindowSize.Y, PresentedFrameWidth, PresentedFrameHeight);
+        PresentedClearColorValid = false;
+        if (framePlan == nullptr) {
+            HasRenderedSceneValue = false;
+            return;
+        }
+
+        UpdatePresentedClearColor(framePlan);
+        if (framePlan->DrawableSubmissions->get_Count() <= 0) {
+            HasRenderedSceneValue = false;
+            delete framePlan;
+            return;
+        }
+
+        ExtractedFrameCount++;
+        HasRenderedSceneValue = RasterRenderer->DrawFrame(framePlan);
+        delete framePlan;
     }
 
     /// Registers the 2D overlay render manager used by the generated draw path.
@@ -100,6 +334,18 @@ namespace helengine::wii {
         OverlayRenderManager2D = renderManager2D;
     }
 
+    /// Registers the physical presented framebuffer size used for GX viewport and scissor setup.
+    void WiiRenderManager3D::SetPresentedFrameSize(uint16_t width, uint16_t height) {
+        if (width == 0U) {
+            throw new ArgumentOutOfRangeException("width");
+        } else if (height == 0U) {
+            throw new ArgumentOutOfRangeException("height");
+        }
+
+        PresentedFrameWidth = width;
+        PresentedFrameHeight = height;
+    }
+
     /// Returns the strict backend capability surface exposed by the first Wii tier.
     RendererBackendCapabilityProfile* WiiRenderManager3D::GetCapabilityProfile() {
         return CapabilityProfile;
@@ -107,7 +353,7 @@ namespace helengine::wii {
 
     /// Reports whether this backend has emitted a native scene frame.
     bool WiiRenderManager3D::HasRenderedScene() const {
-        return false;
+        return HasRenderedSceneValue;
     }
 
     /// Returns whether the current frame resolved one authored camera clear color for presentation.
@@ -120,30 +366,19 @@ namespace helengine::wii {
         return PresentedClearColor;
     }
 
-    /// Refreshes the current presented clear color from the active authored camera set.
-    void WiiRenderManager3D::UpdatePresentedClearColorFromActiveCameras() {
-        PresentedClearColorValid = false;
-
-        Core* core = Core::get_Instance();
-        if (core == nullptr || core->get_ObjectManager() == nullptr) {
+    /// Updates the presented clear color from the active frame-plan camera.
+    void WiiRenderManager3D::UpdatePresentedClearColor(WiiFramePlan* framePlan) {
+        if (framePlan == nullptr || framePlan->Camera == nullptr) {
             return;
         }
 
-        List<ICamera*>* cameras = core->get_ObjectManager()->get_Cameras();
-        for (int32_t cameraIndex = 0; cameraIndex < cameras->get_Count(); cameraIndex++) {
-            CameraComponent* camera = he_cpp_try_cast<CameraComponent>((*cameras)[cameraIndex]);
-            if (camera == nullptr || camera->get_Parent() == nullptr || !camera->get_Parent()->get_IsHierarchyEnabled()) {
-                continue;
-            }
-
-            CameraClearSettings clearSettings = camera->get_ClearSettings();
-            if (!clearSettings.get_ClearColorEnabled()) {
-                continue;
-            }
-
-            PresentedClearColor = ToGxColor(clearSettings.get_ClearColor());
-            PresentedClearColorValid = true;
+        CameraClearSettings clearSettings = framePlan->Camera->get_ClearSettings();
+        if (!clearSettings.get_ClearColorEnabled()) {
+            return;
         }
+
+        PresentedClearColor = ToGxColor(clearSettings.get_ClearColor());
+        PresentedClearColorValid = true;
     }
 
     /// Converts one normalized engine color into the byte GX color contract used by the copy clear path.
@@ -160,5 +395,102 @@ namespace helengine::wii {
     uint8_t WiiRenderManager3D::ConvertNormalizedColorChannel(float value) {
         const double clampedValue = std::clamp(static_cast<double>(value), 0.0, 1.0);
         return static_cast<uint8_t>((clampedValue * 255.0) + 0.5);
+    }
+
+    /// Rebuilds one material render-state instance from the cooked Wii material payload flags.
+    MaterialRenderState* WiiRenderManager3D::BuildMaterialRenderState(PlatformMaterialAsset* materialAsset) {
+        if (materialAsset == nullptr) {
+            throw new ArgumentNullException("materialAsset");
+        }
+
+        MaterialRenderState* renderState = new MaterialRenderState();
+        renderState->set_CullMode(materialAsset->DoubleSided
+            ? MaterialCullMode::None
+            : MaterialCullMode::Back);
+        renderState->set_BlendMode(materialAsset->BaseColorA < 0xFF
+            ? MaterialBlendMode::AlphaBlend
+            : MaterialBlendMode::Opaque);
+        renderState->set_DepthTestEnabled(true);
+        renderState->set_DepthWriteEnabled(materialAsset->BaseColorA >= 0xFF);
+        return renderState;
+    }
+
+    /// Releases one transient cooked/raw model asset after the shared runtime model has been rebuilt.
+    void WiiRenderManager3D::ReleaseTransientModelAsset(ModelAsset* asset) {
+        if (asset == nullptr) {
+            return;
+        }
+
+        Array<float3>* positions = asset->Positions;
+        Array<float3>* normals = asset->Normals;
+        Array<float2>* texCoords = asset->TexCoords;
+        Array<uint16_t>* indices16 = asset->Indices16;
+        Array<uint32_t>* indices32 = asset->Indices32;
+        Array<ModelSubmeshAsset*>* submeshes = asset->Submeshes;
+        asset->Positions = nullptr;
+        asset->Normals = nullptr;
+        asset->TexCoords = nullptr;
+        asset->Indices16 = nullptr;
+        asset->Indices32 = nullptr;
+        asset->Submeshes = nullptr;
+
+        if (submeshes != nullptr) {
+            for (int32_t index = 0; index < submeshes->get_Length(); index++) {
+                delete (*submeshes)[index];
+            }
+        }
+
+        if (positions != nullptr && positions != Array<float3>::Empty()) {
+            delete positions;
+        }
+
+        if (normals != nullptr && normals != Array<float3>::Empty()) {
+            delete normals;
+        }
+
+        if (texCoords != nullptr && texCoords != Array<float2>::Empty()) {
+            delete texCoords;
+        }
+
+        if (indices16 != nullptr && indices16 != Array<uint16_t>::Empty()) {
+            delete indices16;
+        }
+
+        if (indices32 != nullptr && indices32 != Array<uint32_t>::Empty()) {
+            delete indices32;
+        }
+
+        if (submeshes != nullptr && submeshes != Array<ModelSubmeshAsset*>::Empty()) {
+            delete submeshes;
+        }
+
+        delete asset;
+    }
+
+    /// Releases one owned deserialized cooked model payload attached to a Wii runtime model.
+    void WiiRenderManager3D::ReleaseOwnedSourceModelAsset(WiiRuntimeModel* runtimeModel) {
+        if (runtimeModel == nullptr || runtimeModel->OwnedSourceModelAsset == nullptr) {
+            return;
+        }
+
+        ModelAsset* ownedSourceModelAsset = runtimeModel->OwnedSourceModelAsset;
+        Array<ModelSubmeshAsset*>* submeshes = ownedSourceModelAsset->Submeshes;
+        ownedSourceModelAsset->Positions = nullptr;
+        ownedSourceModelAsset->Normals = nullptr;
+        ownedSourceModelAsset->TexCoords = nullptr;
+        ownedSourceModelAsset->Indices16 = nullptr;
+        ownedSourceModelAsset->Indices32 = nullptr;
+        ownedSourceModelAsset->Submeshes = nullptr;
+        runtimeModel->OwnedSourceModelAsset = nullptr;
+
+        if (submeshes != nullptr) {
+            for (int32_t submeshIndex = 0; submeshIndex < submeshes->get_Length(); submeshIndex++) {
+                delete (*submeshes)[submeshIndex];
+            }
+
+            delete submeshes;
+        }
+
+        delete ownedSourceModelAsset;
     }
 }

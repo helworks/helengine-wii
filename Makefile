@@ -72,8 +72,12 @@ $(error HELENGINE_CORE_CPP_ROOT helcpp_config.hpp must define HE_CPP_PLATFORM_IS
 endif
 GENERATED_BRIDGE_SOURCES := \
 	$(SOURCE_DIR)/platform/wii/WiiInputManager.cpp \
+	$(SOURCE_DIR)/platform/wii/WiiMeshCache.cpp \
+	$(SOURCE_DIR)/platform/wii/WiiRasterRenderer.cpp \
 	$(SOURCE_DIR)/platform/wii/WiiRenderManager2D.cpp \
 	$(SOURCE_DIR)/platform/wii/WiiRenderManager3D.cpp \
+	$(SOURCE_DIR)/platform/wii/WiiSceneRenderBridge.cpp \
+	$(SOURCE_DIR)/platform/wii/WiiRuntimeModel.cpp \
 	$(SOURCE_DIR)/platform/wii/WiiRuntimeTexture.cpp \
 	$(SOURCE_DIR)/platform/wii/WiiDiscFileSystem.cpp \
 	$(SOURCE_DIR)/platform/wii/WiiSceneBootstrap.cpp

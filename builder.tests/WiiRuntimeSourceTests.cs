@@ -133,11 +133,28 @@ public sealed class WiiRuntimeSourceTests {
         Assert.Contains("GX_InitTexObj(", runtimeTextureSource, StringComparison.Ordinal);
         Assert.Contains("GX_InitTexObjFilterMode(", runtimeTextureSource, StringComparison.Ordinal);
         Assert.Contains("DCFlushRange(", runtimeTextureSource, StringComparison.Ordinal);
+        Assert.Contains("[Wii] WiiRuntimeTexture::LoadFromRaw width=%u height=%u format=%d colors=%p palette=%p\\n", runtimeTextureSource, StringComparison.Ordinal);
+        Assert.Contains("[Wii] WiiRuntimeTexture::LoadFromRaw using prepacked GxRgb5A3 path.\\n", runtimeTextureSource, StringComparison.Ordinal);
+        Assert.Contains("[Wii] LoadPrepackedRgb5A3 padded=%ux%u expectedBytes=%u actualBytes=%d\\n", runtimeTextureSource, StringComparison.Ordinal);
+        Assert.Contains("[Wii] LoadPrepackedRgb5A3 upload completed native=%ux%u\\n", runtimeTextureSource, StringComparison.Ordinal);
         Assert.Contains("RuntimeTexture* WiiRenderManager2D::BuildTextureFromRaw(TextureAsset* data)", renderManagerSource, StringComparison.Ordinal);
         Assert.Contains("new WiiRuntimeTexture()", renderManagerSource, StringComparison.Ordinal);
         Assert.Contains("runtimeTexture->LoadFromRaw(data);", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("[Wii] BuildTextureFromRaw width=%u height=%u format=%d colors=%p palette=%p\\n", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("[Wii] BuildTextureFromRaw completed.\\n", renderManagerSource, StringComparison.Ordinal);
         Assert.Contains("texture->Dispose();", renderManagerSource, StringComparison.Ordinal);
         Assert.Contains("delete texture;", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("RuntimeTexture* WiiRenderManager2D::BuildTextureFromCooked(std::string cookedAssetPath)", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("File::OpenRead(cookedAssetPath.c_str())", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("AssetSerializer::Deserialize(stream)", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("he_cpp_try_cast<TextureAsset>(asset)", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("ReleaseTransientTextureAsset(textureAsset);", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("[Wii] BuildTextureFromCooked open path=%s\\n", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("[Wii] BuildTextureFromCooked deserialize begin.\\n", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("[Wii] BuildTextureFromCooked deserialize completed asset=%p\\n", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("colors != Array<uint8_t>::Empty()", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("paletteColors != Array<uint8_t>::Empty()", renderManagerSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("Wii generated-core boot does not support cooked texture loading yet.", renderManagerSource, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -193,6 +210,87 @@ public sealed class WiiRuntimeSourceTests {
     }
 
     /// <summary>
+    /// Ensures the Wii 3D bridge can rebuild shared runtime models, retain authored mesh data, and draw indexed GX geometry instead of throwing generated-boot stub errors.
+    /// </summary>
+    [Fact]
+    public void Packaged3D_BuildsRuntimeModelsAndCookedPlatformOwnedMaterials() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string applicationSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiApplication.cpp"));
+        string renderManagerHeaderSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRenderManager3D.hpp"));
+        string renderManagerSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRenderManager3D.cpp"));
+        string runtimeModelHeaderSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRuntimeModel.hpp"));
+        string runtimeModelSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRuntimeModel.cpp"));
+
+        Assert.Contains("class WiiRenderManager3D : public RenderManager3D {", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("RuntimeModel* BuildModelFromRaw(ModelAsset* data) override;", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("RuntimeModel* BuildModelFromCooked(std::string cookedAssetPath) override;", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("RuntimeMaterial* BuildMaterialFromCooked(std::string cookedAssetPath);", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("RuntimeMaterial* BuildMaterialFromCooked(PlatformMaterialAsset* materialAsset);", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("void SetPresentedFrameSize(uint16_t width, uint16_t height);", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("WiiSceneRenderBridge* SceneRenderBridge;", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("WiiMeshCache* MeshCache;", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("WiiRasterRenderer* RasterRenderer;", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("std::vector<RuntimeMaterial*> ReleasedMaterials;", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("std::vector<RuntimeModel*> ReleasedModels;", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("void UpdatePresentedClearColor(WiiFramePlan* framePlan);", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("static MaterialRenderState* BuildMaterialRenderState(PlatformMaterialAsset* materialAsset);", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("static void ReleaseTransientModelAsset(ModelAsset* asset);", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("void ReleaseOwnedSourceModelAsset(WiiRuntimeModel* runtimeModel);", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("EngineRenderManager3D->SetPresentedFrameSize(static_cast<uint16_t>(RenderMode->fbWidth), static_cast<uint16_t>(RenderMode->efbHeight));", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("ModelAssetIndexData* indexData = ModelAssetIndexData::Resolve(data);", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("WiiRuntimeModel* runtimeModel = new WiiRuntimeModel();", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("runtimeModel->set_Id(data->get_Id());", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("runtimeModel->SetBounds(data->BoundsMin, data->BoundsMax);", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("runtimeModel->SetSubmeshes(ModelSubmeshResolver::BuildRuntimeSubmeshes(data));", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("runtimeModel->Positions = data->Positions;", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("runtimeModel->Normals = data->Normals;", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("runtimeModel->TexCoords = data->TexCoords;", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("runtimeModel->Indices16 = indexData->get_Indices16();", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("runtimeModel->Indices32 = indexData->get_Indices32();", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("runtimeModel->Uses32BitIndices = indexData->get_Uses32BitIndices();", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("WiiFramePlan* framePlan = SceneRenderBridge->BuildFramePlan(", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("HasRenderedSceneValue = RasterRenderer->DrawFrame(framePlan);", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("ReleasedMaterials.push_back(material);", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("ReleasedModels.push_back(model);", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("delete RasterRenderer;", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("delete MeshCache;", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("delete SceneRenderBridge;", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("File::OpenRead(cookedAssetPath.c_str())", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("AssetSerializer::Deserialize(stream)", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("he_cpp_try_cast<ModelAsset>(asset)", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("runtimeModel->OwnedSourceModelAsset = cookedModelAsset;", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("PlatformMaterialAsset* materialAsset = he_cpp_try_cast<PlatformMaterialAsset>(asset);", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("return BuildMaterialFromCooked(materialAsset);", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("runtimeMaterial->SetRenderState(BuildMaterialRenderState(materialAsset));", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("renderState->set_CullMode(materialAsset->DoubleSided", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("renderState->set_BlendMode(materialAsset->BaseColorA < 0xFF", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("GXColor WiiRenderManager3D::ToGxColor(float4 color)", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("RenderFrameExtractionService extractor;", File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiSceneRenderBridge.cpp")), StringComparison.Ordinal);
+        Assert.Contains("WiiRuntimeModel* typedRuntimeModel = he_cpp_try_cast<WiiRuntimeModel>(runtimeModel);", File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiMeshCache.cpp")), StringComparison.Ordinal);
+        Assert.Contains("GX_SetViewport(framePlan->PhysicalViewport.X", File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRasterRenderer.cpp")), StringComparison.Ordinal);
+        Assert.Contains("GX_LoadProjectionMtx(projectionMatrix, GX_PERSPECTIVE);", File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRasterRenderer.cpp")), StringComparison.Ordinal);
+        Assert.Contains("GX_Position3f32(cachedPosition.X, cachedPosition.Y, cachedPosition.Z);", File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRasterRenderer.cpp")), StringComparison.Ordinal);
+        Assert.Contains("GX_Color4u8(OpaqueMeshColorRed, OpaqueMeshColorGreen, OpaqueMeshColorBlue, OpaqueMeshColorAlpha);", File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRasterRenderer.cpp")), StringComparison.Ordinal);
+        Assert.Contains("GX_SetPixelFmt(GX_PF_RGBA6_Z24, GX_ZC_LINEAR);", File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiApplication.cpp")), StringComparison.Ordinal);
+        Assert.Contains("class WiiRuntimeModel final : public RuntimeModel {", runtimeModelHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("Array<float3>* Positions;", runtimeModelHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("Array<float3>* Normals;", runtimeModelHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("Array<float2>* TexCoords;", runtimeModelHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("Array<uint16_t>* Indices16;", runtimeModelHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("Array<uint32_t>* Indices32;", runtimeModelHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("bool Uses32BitIndices;", runtimeModelHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("WiiCachedMeshData* CachedMeshData;", runtimeModelHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("ModelAsset* OwnedSourceModelAsset;", runtimeModelHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("WiiRuntimeModel::WiiRuntimeModel()", runtimeModelSource, StringComparison.Ordinal);
+        Assert.Contains("Positions(nullptr)", runtimeModelSource, StringComparison.Ordinal);
+        Assert.Contains("CachedMeshData(nullptr)", runtimeModelSource, StringComparison.Ordinal);
+        Assert.Contains("OwnedSourceModelAsset(nullptr)", runtimeModelSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("Wii generated-core boot does not support raw model creation yet.", renderManagerSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("Wii generated-core boot does not support cooked model loading yet.", renderManagerSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("Wii generated-core boot does not support material creation yet.", renderManagerSource, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Ensures presented Wii frames expose the authored platform version string and honor the active camera clear color instead of the old diagnostic steady-state clears.
     /// </summary>
     [Fact]
@@ -205,11 +303,11 @@ public sealed class WiiRuntimeSourceTests {
         Assert.Contains("new PlatformInfo(\"wii\", \"1.0\")", applicationSource, StringComparison.Ordinal);
         Assert.Contains("bool HasPresentedClearColor() const;", renderManagerHeaderSource, StringComparison.Ordinal);
         Assert.Contains("GXColor GetPresentedClearColor() const;", renderManagerHeaderSource, StringComparison.Ordinal);
-        Assert.Contains("void UpdatePresentedClearColorFromActiveCameras();", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("void UpdatePresentedClearColor(WiiFramePlan* framePlan);", renderManagerHeaderSource, StringComparison.Ordinal);
         Assert.Contains("static GXColor ToGxColor(float4 color);", renderManagerHeaderSource, StringComparison.Ordinal);
         Assert.Contains("static uint8_t ConvertNormalizedColorChannel(float value);", renderManagerHeaderSource, StringComparison.Ordinal);
-        Assert.Contains("UpdatePresentedClearColorFromActiveCameras();", renderManagerSource, StringComparison.Ordinal);
-        Assert.Contains("CameraClearSettings clearSettings = camera->get_ClearSettings();", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("UpdatePresentedClearColor(framePlan);", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("CameraClearSettings clearSettings = framePlan->Camera->get_ClearSettings();", renderManagerSource, StringComparison.Ordinal);
         Assert.Contains("if (!clearSettings.get_ClearColorEnabled())", renderManagerSource, StringComparison.Ordinal);
         Assert.Contains("PresentedClearColor = ToGxColor(clearSettings.get_ClearColor());", renderManagerSource, StringComparison.Ordinal);
         Assert.Contains("PresentedClearColorValid = true;", renderManagerSource, StringComparison.Ordinal);
