@@ -1,6 +1,8 @@
 #include "platform/wii/WiiRasterRenderer.hpp"
 
 #include <algorithm>
+#include <cmath>
+#include <cstring>
 
 #include <ogc/system.h>
 
@@ -26,6 +28,38 @@ namespace {
     constexpr u8 OpaqueMeshColorGreen = 255;
     constexpr u8 OpaqueMeshColorBlue = 255;
     constexpr u8 OpaqueMeshColorAlpha = 255;
+    bool MatrixProbeReported = false;
+    Mtx44 UploadedProjectionMatrix {};
+    bool UploadedProjectionMatrixCaptured = false;
+
+    void ReportFloat4x4(const char* label, const float4x4& matrix) {
+        SYS_Report(
+            "[Wii][MatrixProbe] %s [%.6f %.6f %.6f %.6f] [%.6f %.6f %.6f %.6f] [%.6f %.6f %.6f %.6f] [%.6f %.6f %.6f %.6f]\n",
+            label,
+            matrix.M11, matrix.M12, matrix.M13, matrix.M14,
+            matrix.M21, matrix.M22, matrix.M23, matrix.M24,
+            matrix.M31, matrix.M32, matrix.M33, matrix.M34,
+            matrix.M41, matrix.M42, matrix.M43, matrix.M44);
+    }
+
+    void ReportMtx(const char* label, const Mtx& matrix) {
+        SYS_Report(
+            "[Wii][MatrixProbe] %s [%.6f %.6f %.6f %.6f] [%.6f %.6f %.6f %.6f] [%.6f %.6f %.6f %.6f]\n",
+            label,
+            matrix[0][0], matrix[0][1], matrix[0][2], matrix[0][3],
+            matrix[1][0], matrix[1][1], matrix[1][2], matrix[1][3],
+            matrix[2][0], matrix[2][1], matrix[2][2], matrix[2][3]);
+    }
+
+    void ReportMtx44(const char* label, const Mtx44& matrix) {
+        SYS_Report(
+            "[Wii][MatrixProbe] %s [%.6f %.6f %.6f %.6f] [%.6f %.6f %.6f %.6f] [%.6f %.6f %.6f %.6f] [%.6f %.6f %.6f %.6f]\n",
+            label,
+            matrix[0][0], matrix[0][1], matrix[0][2], matrix[0][3],
+            matrix[1][0], matrix[1][1], matrix[1][2], matrix[1][3],
+            matrix[2][0], matrix[2][1], matrix[2][2], matrix[2][3],
+            matrix[3][0], matrix[3][1], matrix[3][2], matrix[3][3]);
+    }
 }
 
 namespace helengine::wii {
@@ -54,14 +88,9 @@ namespace helengine::wii {
         GX_InvVtxCache();
 
         Mtx44 projectionMatrix;
-        const float viewportHeight = framePlan->LogicalViewport.W > 0.0f ? framePlan->LogicalViewport.W : 1.0f;
-        const float aspectRatio = framePlan->LogicalViewport.Z / viewportHeight;
-        guPerspective(
-            projectionMatrix,
-            45.0f,
-            aspectRatio,
-            framePlan->Camera->get_NearPlaneDistance(),
-            framePlan->Camera->get_FarPlaneDistance());
+        CopyProjectionMatrixToGx(framePlan->Projection, projectionMatrix);
+        std::memcpy(UploadedProjectionMatrix, projectionMatrix, sizeof(Mtx44));
+        UploadedProjectionMatrixCaptured = true;
         GX_LoadProjectionMtx(projectionMatrix, GX_PERSPECTIVE);
 
         if (framePlan->DrawableSubmissions->get_Count() <= 0) {
@@ -177,6 +206,93 @@ namespace helengine::wii {
         destination[2][1] = source.M23;
         destination[2][2] = source.M33;
         destination[2][3] = source.M43;
+    }
+
+    /// Copies one generated projection matrix into the GX projection upload layout.
+    void WiiRasterRenderer::CopyProjectionMatrixToGx(const float4x4& source, Mtx44& destination) {
+        destination[0][0] = source.M11;
+        destination[0][1] = source.M21;
+        destination[0][2] = source.M31;
+        destination[0][3] = source.M41;
+        destination[1][0] = source.M12;
+        destination[1][1] = source.M22;
+        destination[1][2] = source.M32;
+        destination[1][3] = source.M42;
+        destination[2][0] = source.M13;
+        destination[2][1] = source.M23;
+        destination[2][2] = source.M33 + 1.0f;
+        destination[2][3] = source.M43;
+        destination[3][0] = source.M14;
+        destination[3][1] = source.M24;
+        destination[3][2] = source.M34;
+        destination[3][3] = source.M44;
+    }
+
+    /// Emits one first-draw matrix comparison between generated float4x4 output and the native libogc GX path.
+    void WiiRasterRenderer::ReportMatrixProbe(WiiFramePlan* framePlan, Entity* entity) {
+        if (MatrixProbeReported) {
+            return;
+        } else if (framePlan == nullptr) {
+            throw new ArgumentNullException("framePlan");
+        } else if (entity == nullptr) {
+            throw new ArgumentNullException("entity");
+        }
+
+        const float4 entityOrientation = entity->get_Orientation();
+        const bool isIdentityOrientation =
+            std::fabs(entityOrientation.X) < 0.0001f &&
+            std::fabs(entityOrientation.Y) < 0.0001f &&
+            std::fabs(entityOrientation.Z) < 0.0001f &&
+            std::fabs(entityOrientation.W - 1.0f) < 0.0001f;
+        if (isIdentityOrientation) {
+            return;
+        }
+
+        float4x4 generatedWorldMatrix;
+        BuildWorldMatrix(entity, generatedWorldMatrix);
+        float4x4 generatedModelViewMatrix;
+        BuildModelViewMatrix(framePlan, entity, generatedModelViewMatrix);
+
+        Mtx nativeViewMatrix;
+        BuildNativeViewMatrix(framePlan->Camera, nativeViewMatrix);
+        Mtx nativeModelMatrix;
+        BuildNativeModelMatrix(entity, nativeModelMatrix);
+        Mtx nativeModelViewMatrix;
+        BuildNativeModelViewMatrix(framePlan->Camera, entity, nativeModelViewMatrix);
+        Mtx44 nativeProjectionMatrix;
+        const float viewportHeight = framePlan->LogicalViewport.W > 0.0f ? framePlan->LogicalViewport.W : 1.0f;
+        const float aspectRatio = framePlan->LogicalViewport.Z / viewportHeight;
+        guPerspective(
+            nativeProjectionMatrix,
+            45.0f,
+            aspectRatio,
+            framePlan->Camera->get_NearPlaneDistance(),
+            framePlan->Camera->get_FarPlaneDistance());
+
+        SYS_Report(
+            "[Wii][MatrixProbe] entityPos=(%.6f, %.6f, %.6f) entityScale=(%.6f, %.6f, %.6f) entityRot=(%.6f, %.6f, %.6f, %.6f)\n",
+            entity->get_Position().X,
+            entity->get_Position().Y,
+            entity->get_Position().Z,
+            entity->get_Scale().X,
+            entity->get_Scale().Y,
+            entity->get_Scale().Z,
+            entityOrientation.X,
+            entityOrientation.Y,
+            entityOrientation.Z,
+            entityOrientation.W);
+        ReportFloat4x4("generated.view", framePlan->View);
+        ReportMtx("native.view", nativeViewMatrix);
+        ReportFloat4x4("generated.projection", framePlan->Projection);
+        ReportMtx44("native.projection", nativeProjectionMatrix);
+        if (UploadedProjectionMatrixCaptured) {
+            ReportMtx44("uploaded.projection", UploadedProjectionMatrix);
+        }
+        ReportFloat4x4("generated.world", generatedWorldMatrix);
+        ReportMtx("native.model", nativeModelMatrix);
+        ReportFloat4x4("generated.modelView", generatedModelViewMatrix);
+        ReportMtx("native.modelView", nativeModelViewMatrix);
+        MatrixProbeReported = true;
     }
 
     /// Builds one native GX view matrix directly from the active camera transform through libogc.
@@ -382,6 +498,7 @@ namespace helengine::wii {
 
         Mtx nativeModelViewMatrix;
         BuildNativeModelViewMatrix(framePlan->Camera, entity, nativeModelViewMatrix);
+        ReportMatrixProbe(framePlan, entity);
         GX_LoadPosMtxImm(nativeModelViewMatrix, GX_PNMTX0);
         GX_SetCurrentMtx(GX_PNMTX0);
 

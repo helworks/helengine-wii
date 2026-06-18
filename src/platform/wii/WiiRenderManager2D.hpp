@@ -42,7 +42,7 @@ namespace helengine::wii {
         /// Rebuilds one packaged texture asset into a Wii-native runtime texture.
         RuntimeTexture* BuildTextureFromRaw(TextureAsset* data) override;
 
-        /// Fails because cooked texture loading is outside the generated-core boot slice.
+        /// Rebuilds one platform-owned cooked texture payload into a Wii-native runtime texture.
         RuntimeTexture* BuildTextureFromCooked(std::string cookedAssetPath) override;
 
         /// Releases one Wii runtime texture.
@@ -117,6 +117,9 @@ namespace helengine::wii {
 
         /// Configures the native GX state used by the Wii text overlay pass.
         void ConfigureTextPipeline(uint16_t logicalFrameWidth, uint16_t logicalFrameHeight, uint16_t physicalFrameWidth, uint16_t physicalFrameHeight);
+
+        /// Releases one transient cooked texture asset after the runtime texture has been rebuilt from its payload.
+        static void ReleaseTransientTextureAsset(TextureAsset* asset);
 
         /// Emits one textured screen-space quad in pixel coordinates for the active glyph pass.
         void DrawTexturedQuad2D(float x, float y, float width, float height, const float4& sourceRect, byte4 color, WiiRuntimeTexture* texture);

@@ -2,3 +2,8 @@ build/
 *.elf
 *.map
 .worktrees/
+**/bin/
+**/obj/
+cooked/
+runtime_registry_trace.txt
+tmp/

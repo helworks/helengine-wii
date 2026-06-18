@@ -49,6 +49,12 @@ namespace helengine::wii {
         /// Copies one generated affine matrix directly into a GX position matrix without runtime reinterpretation.
         void CopyAffineMatrixToGx(const float4x4& source, Mtx& destination);
 
+        /// Copies one generated full projection matrix into a GX projection matrix without runtime reinterpretation.
+        void CopyProjectionMatrixToGx(const float4x4& source, Mtx44& destination);
+
+        /// Emits a one-shot comparison between generated and native GX matrix paths for the first 3D draw.
+        void ReportMatrixProbe(WiiFramePlan* framePlan, Entity* entity);
+
         /// Builds one native GX view matrix directly from the active camera transform.
         void BuildNativeViewMatrix(CameraComponent* camera, Mtx& viewMatrix);
 

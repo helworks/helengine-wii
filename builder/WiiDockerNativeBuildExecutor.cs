@@ -65,7 +65,7 @@ public sealed class WiiDockerNativeBuildExecutor : IWiiNativeBuildExecutor {
         }
 
         ProcessStartInfo startInfo = new() {
-            FileName = "rtk",
+            FileName = "docker",
             WorkingDirectory = paths.RepositoryRootPath,
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -74,7 +74,6 @@ public sealed class WiiDockerNativeBuildExecutor : IWiiNativeBuildExecutor {
         };
 
         string generatedCoreContainerPath = "/workspace/" + paths.GeneratedCoreRelativePath;
-        startInfo.ArgumentList.Add("docker");
         startInfo.ArgumentList.Add("run");
         startInfo.ArgumentList.Add("--rm");
         startInfo.ArgumentList.Add("-v");
@@ -92,9 +91,9 @@ public sealed class WiiDockerNativeBuildExecutor : IWiiNativeBuildExecutor {
         startInfo.ArgumentList.Add("-e");
         startInfo.ArgumentList.Add("HELENGINE_WII_BOOT_MODE=packaged-disc");
         startInfo.ArgumentList.Add("helengine-wii");
-        startInfo.ArgumentList.Add("make");
-        startInfo.ArgumentList.Add("clean");
-        startInfo.ArgumentList.Add("all");
+        startInfo.ArgumentList.Add("sh");
+        startInfo.ArgumentList.Add("-lc");
+        startInfo.ArgumentList.Add("make clean; make");
         return startInfo;
     }
 

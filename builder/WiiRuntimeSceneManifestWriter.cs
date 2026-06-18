@@ -105,7 +105,7 @@ public sealed class WiiRuntimeSceneManifestWriter {
             if (string.Equals(metadataEntry.Key, "cooked-relative-path", StringComparison.OrdinalIgnoreCase)
                 && !string.IsNullOrWhiteSpace(metadataEntry.Value)) {
                 string canonicalLogicalRelativePath = CanonicalPackagedAssetPath.Normalize(metadataEntry.Value);
-                return WiiDiscPathResolver.ResolvePhysicalRelativePath(canonicalLogicalRelativePath);
+                return canonicalLogicalRelativePath;
             }
         }
 

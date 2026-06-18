@@ -29,9 +29,10 @@ public sealed class WiiDockerNativeBuildExecutorTests {
         ProcessStartInfo startInfo = (ProcessStartInfo)createStartInfoMethod.Invoke(null, [paths]);
 
         Assert.Contains("HELENGINE_WII_BOOT_MODE=packaged-disc", startInfo.ArgumentList);
-        Assert.Contains("make", startInfo.ArgumentList);
-        Assert.Contains("clean", startInfo.ArgumentList);
-        Assert.Contains("all", startInfo.ArgumentList);
+        Assert.Equal("docker", startInfo.FileName);
+        Assert.Contains("sh", startInfo.ArgumentList);
+        Assert.Contains("-lc", startInfo.ArgumentList);
+        Assert.Contains("make clean; make", startInfo.ArgumentList);
     }
 
     /// <summary>

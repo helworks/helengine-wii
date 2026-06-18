@@ -46,7 +46,8 @@ public sealed class WiiRuntimeSceneManifestWriterTests {
 
             string source = File.ReadAllText(Path.Combine(outputRootPath, "runtime", "wii_runtime_scene_manifest.inl"));
             Assert.Contains("\"Scenes/DemoDiscMainMenu.helen\"", source, StringComparison.Ordinal);
-            Assert.Contains("\"files/cooked/scenes/demodiscmainmenu.hasset\"", source, StringComparison.Ordinal);
+            Assert.Contains("\"cooked/scenes/demodiscmainmenu.hasset\"", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"files/cooked/scenes/demodiscmainmenu.hasset\"", source, StringComparison.Ordinal);
         } finally {
             if (Directory.Exists(outputRootPath)) {
                 Directory.Delete(outputRootPath, recursive: true);

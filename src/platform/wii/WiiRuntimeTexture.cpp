@@ -6,6 +6,7 @@
 
 #include <malloc.h>
 #include <ogc/cache.h>
+#include <ogc/system.h>
 
 #include "TextureAsset.hpp"
 #include "TextureAssetColorFormat.hpp"
@@ -68,14 +69,23 @@ namespace helengine::wii {
             throw new ArgumentNullException("data");
         }
 
+        SYS_Report(
+            "[Wii] WiiRuntimeTexture::LoadFromRaw width=%u height=%u format=%d colors=%p palette=%p\n",
+            data->Width,
+            data->Height,
+            static_cast<int32_t>(data->ColorFormat),
+            data->Colors,
+            data->PaletteColors);
         ResetNativeTextureData();
         if (data->ColorFormat == TextureAssetColorFormat::GxRgb5A3) {
+            SYS_Report("[Wii] WiiRuntimeTexture::LoadFromRaw using prepacked GxRgb5A3 path.\n");
             LoadPrepackedRgb5A3(data);
             return;
         } else if (data->ColorFormat != TextureAssetColorFormat::Rgba32) {
             throw new InvalidOperationException("Wii runtime textures require either GxRgb5A3 or RGBA32 texture assets.");
         }
 
+        SYS_Report("[Wii] WiiRuntimeTexture::LoadFromRaw using RGBA32 transcode path.\n");
         EncodeRgba32ToRgb5A3(data);
     }
 
@@ -132,6 +142,12 @@ namespace helengine::wii {
         const uint32_t paddedWidth = (width + 3U) & ~3U;
         const uint32_t paddedHeight = (height + 3U) & ~3U;
         const std::size_t expectedColorByteCount = static_cast<std::size_t>(paddedWidth) * static_cast<std::size_t>(paddedHeight) * 2U;
+        SYS_Report(
+            "[Wii] LoadPrepackedRgb5A3 padded=%ux%u expectedBytes=%u actualBytes=%d\n",
+            paddedWidth,
+            paddedHeight,
+            static_cast<uint32_t>(expectedColorByteCount),
+            data->Colors->Length);
         if (data->Colors->Length != static_cast<int32_t>(expectedColorByteCount)) {
             throw new InvalidOperationException("Wii prepacked textures must contain padded tiled RGB5A3 bytes.");
         }
@@ -151,6 +167,7 @@ namespace helengine::wii {
         NativeTextureHeight = paddedHeight;
         this->set_Width(static_cast<int32_t>(width));
         this->set_Height(static_cast<int32_t>(height));
+        SYS_Report("[Wii] LoadPrepackedRgb5A3 upload completed native=%ux%u\n", paddedWidth, paddedHeight);
     }
 
     /// Encodes one logical RGBA32 texture into tiled GX RGB5A3 memory for Wii text rendering.
@@ -166,6 +183,12 @@ namespace helengine::wii {
         const uint32_t width = data->Width;
         const uint32_t height = data->Height;
         const std::size_t expectedColorByteCount = static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4U;
+        SYS_Report(
+            "[Wii] EncodeRgba32ToRgb5A3 source=%ux%u expectedBytes=%u actualBytes=%d\n",
+            width,
+            height,
+            static_cast<uint32_t>(expectedColorByteCount),
+            data->Colors->get_Length());
         if (data->Colors->get_Length() != static_cast<int32_t>(expectedColorByteCount)) {
             throw new InvalidOperationException("Wii runtime textures require tightly packed RGBA32 color bytes.");
         }
@@ -205,5 +228,6 @@ namespace helengine::wii {
         NativeTextureHeight = nativeHeight;
         this->set_Width(static_cast<int32_t>(width));
         this->set_Height(static_cast<int32_t>(height));
+        SYS_Report("[Wii] EncodeRgba32ToRgb5A3 upload completed native=%ux%u\n", nativeWidth, nativeHeight);
     }
 }

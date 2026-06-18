@@ -28,7 +28,7 @@ That wrapper runs the main editor CLI with `--build wii` and writes the generate
 Use the checked-in launcher script:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\tmp\launch_wii_iso_in_dolphin.ps1 `
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\launch_wii_iso_in_dolphin.ps1 `
   -IsoPath .\tmp\packaged-disc-proof-life\city.iso
 ```
 

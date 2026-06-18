@@ -6,6 +6,7 @@
 #include <vector>
 
 #include <gccore.h>
+#include <ogc/system.h>
 
 #include "CameraComponent.hpp"
 #include "Core.hpp"
@@ -19,10 +20,14 @@
 #include "RenderCommand2DType.hpp"
 #include "RenderCommandList2D.hpp"
 #include "RenderCommandListBuilder2D.hpp"
+#include "Asset.hpp"
+#include "AssetSerializer.hpp"
 #include "TextureAsset.hpp"
+#include "system/io/file.hpp"
 #include "platform/wii/WiiRuntimeTexture.hpp"
 #include "runtime/native_cast.hpp"
 #include "runtime/native_exceptions.hpp"
+#include "runtime/finally.hpp"
 
 namespace helengine::wii {
     /// Creates the Wii 2D render bridge.
@@ -39,18 +44,53 @@ namespace helengine::wii {
             throw new ArgumentNullException("data");
         }
 
+        SYS_Report(
+            "[Wii] BuildTextureFromRaw width=%u height=%u format=%d colors=%p palette=%p\n",
+            data->Width,
+            data->Height,
+            static_cast<int32_t>(data->ColorFormat),
+            data->Colors,
+            data->PaletteColors);
         WiiRuntimeTexture* runtimeTexture = new WiiRuntimeTexture();
         runtimeTexture->LoadFromRaw(data);
+        SYS_Report("[Wii] BuildTextureFromRaw completed.\n");
         return runtimeTexture;
     }
 
-    /// Fails because cooked texture loading is outside the generated-core boot slice.
+    /// Rebuilds one platform-owned cooked texture payload into a Wii-native runtime texture.
     RuntimeTexture* WiiRenderManager2D::BuildTextureFromCooked(std::string cookedAssetPath) {
         if (cookedAssetPath.empty()) {
             throw new ArgumentException("Wii cooked texture path is required.", "cookedAssetPath");
         }
 
-        throw new InvalidOperationException("Wii generated-core boot does not support cooked texture loading yet.");
+        SYS_Report("[Wii] BuildTextureFromCooked open path=%s\n", cookedAssetPath.c_str());
+        FileStream* stream = File::OpenRead(cookedAssetPath.c_str());
+        auto streamGuard = he_cpp_make_scope_exit([&]() {
+            if (stream != nullptr) {
+                stream->Dispose();
+                delete stream;
+            }
+        });
+        SYS_Report("[Wii] BuildTextureFromCooked deserialize begin.\n");
+        Asset* asset = AssetSerializer::Deserialize(stream);
+        SYS_Report("[Wii] BuildTextureFromCooked deserialize completed asset=%p\n", asset);
+        TextureAsset* textureAsset = he_cpp_try_cast<TextureAsset>(asset);
+        if (textureAsset == nullptr) {
+            delete asset;
+            throw new InvalidOperationException("Wii cooked texture payload did not deserialize into a TextureAsset.");
+        }
+
+        SYS_Report(
+            "[Wii] BuildTextureFromCooked texture width=%u height=%u format=%d colors=%p palette=%p\n",
+            textureAsset->Width,
+            textureAsset->Height,
+            static_cast<int32_t>(textureAsset->ColorFormat),
+            textureAsset->Colors,
+            textureAsset->PaletteColors);
+        auto textureAssetGuard = he_cpp_make_scope_exit([&]() {
+            ReleaseTransientTextureAsset(textureAsset);
+        });
+        return BuildTextureFromRaw(textureAsset);
     }
 
     /// Releases one Wii runtime texture.
@@ -71,6 +111,26 @@ namespace helengine::wii {
 
         font->Dispose();
         delete font;
+    }
+
+    /// Releases one transient cooked texture asset after the runtime texture has been rebuilt from its payload.
+    void WiiRenderManager2D::ReleaseTransientTextureAsset(TextureAsset* asset) {
+        if (asset == nullptr) {
+            return;
+        }
+
+        Array<uint8_t>* colors = asset->Colors;
+        Array<uint8_t>* paletteColors = asset->PaletteColors;
+        asset->Colors = nullptr;
+        asset->PaletteColors = nullptr;
+        if (colors != nullptr && colors != Array<uint8_t>::Empty()) {
+            delete colors;
+        }
+
+        if (paletteColors != nullptr && paletteColors != Array<uint8_t>::Empty()) {
+            delete paletteColors;
+        }
+        delete asset;
     }
 
     /// Walks the active camera 2D queue and lets each drawable submit itself into this frame capture.

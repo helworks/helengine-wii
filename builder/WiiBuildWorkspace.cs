@@ -75,6 +75,7 @@ public static class WiiBuildWorkspace {
         }
 
         WriteRuntimeSceneManifest(paths, request.Manifest);
+        new WiiRuntimeGeneratedModuleStager().PrepareGeneratedCoreRuntimeSupport(paths.GeneratedCoreRootPath);
         WritePhaseMarker(phaseMarkerPath, "runtime scene manifest written");
         progressReporter.Report(new PlatformBuildProgressUpdate("Generate Runtime Manifest", "runtime-scene-manifest", 1, 4, "Generated Wii packaged runtime scene manifest."));
 
