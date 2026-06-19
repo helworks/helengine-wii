@@ -469,7 +469,7 @@ public sealed class WiiRuntimeSourceTests {
         string launcherSource = File.ReadAllText(launcherPath);
 
         Assert.Contains("[Parameter(Mandatory = $true)]", launcherSource, StringComparison.Ordinal);
-        Assert.Contains("[string]$IsoPath", launcherSource, StringComparison.Ordinal);
+        Assert.Contains("[string]$ArtifactPath", launcherSource, StringComparison.Ordinal);
         Assert.Contains("Get-Process -Name 'Dolphin'", launcherSource, StringComparison.Ordinal);
         Assert.Contains("Logger.ini", launcherSource, StringComparison.Ordinal);
         Assert.Contains("Wii", launcherSource, StringComparison.Ordinal);
@@ -483,7 +483,7 @@ public sealed class WiiRuntimeSourceTests {
         Assert.Contains("logvisible=true", launcherSource, StringComparison.Ordinal);
         Assert.Contains("logconfigvisible=true", launcherSource, StringComparison.Ordinal);
         Assert.Contains("Start-Process", launcherSource, StringComparison.Ordinal);
-        Assert.Contains("'-u', $userDir, '-e', $resolvedIsoPath", launcherSource, StringComparison.Ordinal);
+        Assert.Contains("'-u', $userDir, '-e', $resolvedArtifactPath", launcherSource, StringComparison.Ordinal);
     }
 
     /// <summary>
