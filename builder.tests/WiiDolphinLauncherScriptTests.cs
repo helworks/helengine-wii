@@ -1,26 +1,26 @@
 namespace helengine.wii.builder.tests;
 
 /// <summary>
-/// Guards the developer launcher contract for running explicit Wii ISO files in Dolphin.
+/// Guards the canonical Wii launcher contract for running explicit Wii artifacts in Dolphin.
 /// </summary>
 public sealed class WiiDolphinLauncherScriptTests {
     /// <summary>
-    /// Ensures the launcher keeps an explicit ISO path contract, force-closes Dolphin, prints ISO timestamp data, and seeds the logging profile.
+    /// Ensures the canonical launcher requires one explicit artifact path, force-closes Dolphin, prints artifact timestamp data, and seeds the logging profile.
     /// </summary>
     [Fact]
-    public void DolphinIsoLauncher_KeepsExplicitIsoPathAndLoggingProfileContract() {
+    public void Launcher_RequiresArtifactPath_AndKeepsLoggingProfileContract() {
         string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
-        string scriptPath = Path.Combine(repositoryRootPath, "tmp", "launch_wii_iso_in_dolphin.ps1");
+        string scriptPath = Path.Combine(repositoryRootPath, "scripts", "launch_in_emulator.ps1");
 
-        Assert.True(File.Exists(scriptPath), "Expected tmp/launch_wii_iso_in_dolphin.ps1 to exist.");
+        Assert.True(File.Exists(scriptPath), "Expected scripts/launch_in_emulator.ps1 to exist.");
 
         string scriptSource = File.ReadAllText(scriptPath);
 
         Assert.Contains("[Parameter(Mandatory = $true)]", scriptSource, StringComparison.Ordinal);
-        Assert.Contains("[string]$IsoPath", scriptSource, StringComparison.Ordinal);
+        Assert.Contains("[string]$ArtifactPath", scriptSource, StringComparison.Ordinal);
         Assert.Contains("Get-Process -Name 'Dolphin'", scriptSource, StringComparison.Ordinal);
         Assert.Contains("Stop-Process", scriptSource, StringComparison.Ordinal);
-        Assert.Contains("Get-Item -LiteralPath $resolvedIsoPath", scriptSource, StringComparison.Ordinal);
+        Assert.Contains("Get-Item -LiteralPath $resolvedArtifactPath", scriptSource, StringComparison.Ordinal);
         Assert.Contains("LastWriteTime", scriptSource, StringComparison.Ordinal);
         Assert.Contains("Qt.ini", scriptSource, StringComparison.Ordinal);
         Assert.Contains("Wii", scriptSource, StringComparison.Ordinal);
@@ -43,24 +43,21 @@ public sealed class WiiDolphinLauncherScriptTests {
         Assert.Contains("logconfigvisible=true", scriptSource, StringComparison.Ordinal);
         Assert.Contains("Start-Process", scriptSource, StringComparison.Ordinal);
         Assert.Contains("-PassThru", scriptSource, StringComparison.Ordinal);
-        Assert.Contains("'-u', $userDir, '-e', $resolvedIsoPath", scriptSource, StringComparison.Ordinal);
+        Assert.Contains("'-u', $userDir, '-e', $resolvedArtifactPath", scriptSource, StringComparison.Ordinal);
         Assert.Contains("PROCESS_ID=", scriptSource, StringComparison.Ordinal);
-        Assert.DoesNotContain("city.iso", scriptSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("[string]$IsoPath", scriptSource, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// Ensures the README documents the explicit ISO launcher workflow for Dolphin.
+    /// Ensures the README documents the canonical Wii launcher workflow for Dolphin.
     /// </summary>
     [Fact]
-    public void Readme_DocumentsExplicitIsoLauncherWorkflow() {
+    public void Readme_DocumentsCanonicalLauncherWorkflow() {
         string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
         string readmeSource = File.ReadAllText(Path.Combine(repositoryRootPath, "README.md"));
 
-        Assert.Contains("launch_wii_iso_in_dolphin.ps1", readmeSource, StringComparison.Ordinal);
-        Assert.Contains("-IsoPath", readmeSource, StringComparison.Ordinal);
-        Assert.Contains("process id", readmeSource, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("logger window", readmeSource, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Logger.ini", readmeSource, StringComparison.Ordinal);
-        Assert.Contains("global Dolphin profile", readmeSource, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("launch_in_emulator.ps1", readmeSource, StringComparison.Ordinal);
+        Assert.Contains("-ArtifactPath", readmeSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("launch_wii_iso_in_dolphin.ps1", readmeSource, StringComparison.Ordinal);
     }
 }
