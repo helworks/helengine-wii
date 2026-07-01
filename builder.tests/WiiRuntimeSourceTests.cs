@@ -87,18 +87,18 @@ public sealed class WiiRuntimeSourceTests {
     }
 
     /// <summary>
-    /// Ensures the Wii host registers the 3D physics runtime only when the generated core exported the registration header.
+    /// Ensures the Wii host registers generated runtime modules only when the generated core exported the generic runtime module registration header.
     /// </summary>
     [Fact]
-    public void PackagedBootstrap_RegistersPhysicsRuntimeConditionallyBeforeStartupSceneLoad() {
+    public void PackagedBootstrap_RegistersGeneratedRuntimeModulesConditionallyBeforeStartupSceneLoad() {
         string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
         string makefileSource = File.ReadAllText(Path.Combine(repositoryRootPath, "Makefile"));
         string applicationSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiApplication.cpp"));
 
-        Assert.Contains("HELENGINE_WII_HAS_PHYSICS3D_RUNTIME_REGISTRATION", makefileSource, StringComparison.Ordinal);
-        Assert.Contains("#if HELENGINE_WII_HAS_PHYSICS3D_RUNTIME_REGISTRATION", applicationSource, StringComparison.Ordinal);
-        Assert.Contains("#include \"Physics3DRuntimeComponentRegistration.hpp\"", applicationSource, StringComparison.Ordinal);
-        Assert.Contains("Physics3DRuntimeComponentRegistration::Register(EngineCore);", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("HELENGINE_WII_HAS_GENERATED_RUNTIME_MODULE_REGISTRATION", makefileSource, StringComparison.Ordinal);
+        Assert.Contains("#if HELENGINE_WII_HAS_GENERATED_RUNTIME_MODULE_REGISTRATION", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("#include \"GeneratedRuntimeModuleRegistration.hpp\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("RegisterGeneratedRuntimeModules(EngineCore);", applicationSource, StringComparison.Ordinal);
         Assert.Contains("EngineCore->get_SceneManager()->LoadScene(packagedStartupSceneId, SceneLoadMode::Single);", applicationSource, StringComparison.Ordinal);
     }
 
