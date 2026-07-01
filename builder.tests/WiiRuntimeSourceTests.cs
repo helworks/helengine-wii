@@ -291,6 +291,139 @@ public sealed class WiiRuntimeSourceTests {
     }
 
     /// <summary>
+    /// Ensures the Wii 3D draw path mirrors the GameCube generated-matrix contract by uploading generated projection and model-view matrices through the GX adapters instead of mixing in native libogc model-view construction.
+    /// </summary>
+    [Fact]
+    public void Packaged3D_UsesGeneratedFloat4x4ProjectionAndModelViewUploadPath() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string rasterRendererHeaderSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRasterRenderer.hpp"));
+        string rasterRendererSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRasterRenderer.cpp"));
+
+        Assert.Contains("void CopyProjectionMatrixToGx(const float4x4& source, Mtx44& destination);", rasterRendererHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("CopyProjectionMatrixToGx(framePlan->Projection, projectionMatrix);", rasterRendererSource, StringComparison.Ordinal);
+        Assert.Contains("float4x4 modelViewMatrix;", rasterRendererSource, StringComparison.Ordinal);
+        Assert.Contains("BuildModelViewMatrix(framePlan, entity, modelViewMatrix);", rasterRendererSource, StringComparison.Ordinal);
+        Assert.Contains("CopyAffineMatrixToGx(modelViewMatrix, nativeModelViewMatrix);", rasterRendererSource, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ensures the Wii frame plan owns and releases the extracted render-frame graph so per-frame extraction allocations do not leak until the console runs out of memory.
+    /// </summary>
+    [Fact]
+    public void Packaged3D_WiiFramePlanOwnsAndReleasesExtractedRenderFrameGraph() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string makefileSource = File.ReadAllText(Path.Combine(repositoryRootPath, "Makefile"));
+        string framePlanHeaderSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiFramePlan.hpp"));
+        string framePlanSourcePath = Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiFramePlan.cpp");
+        string framePlanSource = File.Exists(framePlanSourcePath)
+            ? File.ReadAllText(framePlanSourcePath)
+            : string.Empty;
+        string sceneRenderBridgeSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiSceneRenderBridge.cpp"));
+
+        Assert.Contains("#include \"RenderFrameExtractionResult.hpp\"", framePlanHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("class IDrawable3D;", framePlanHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("class LightComponent;", framePlanHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("RenderFrameExtractionResult* extractionResult,", framePlanHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("List<CameraComponent*>* cameras,", framePlanHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("List<IDrawable3D*>* drawables,", framePlanHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("List<LightComponent*>* lights,", framePlanHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("~WiiFramePlan();", framePlanHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("RenderFrameExtractionResult* ExtractionResult;", framePlanHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("List<CameraComponent*>* Cameras;", framePlanHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("List<IDrawable3D*>* Drawables;", framePlanHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("List<LightComponent*>* Lights;", framePlanHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("WiiFramePlan::~WiiFramePlan()", framePlanSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("#include <unordered_set>", framePlanSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("std::unordered_set<", framePlanSource, StringComparison.Ordinal);
+        Assert.Contains("const bool deleteSharedSubmissionItems = frameIndex == 0;", framePlanSource, StringComparison.Ordinal);
+        Assert.Contains("DeleteExtractionResult(ExtractionResult);", framePlanSource, StringComparison.Ordinal);
+        Assert.Contains("delete Cameras;", framePlanSource, StringComparison.Ordinal);
+        Assert.Contains("delete Drawables;", framePlanSource, StringComparison.Ordinal);
+        Assert.Contains("delete Lights;", framePlanSource, StringComparison.Ordinal);
+        Assert.Contains("new WiiFramePlan(", sceneRenderBridgeSource, StringComparison.Ordinal);
+        Assert.Contains("extraction,", sceneRenderBridgeSource, StringComparison.Ordinal);
+        Assert.Contains("cameras,", sceneRenderBridgeSource, StringComparison.Ordinal);
+        Assert.Contains("drawables,", sceneRenderBridgeSource, StringComparison.Ordinal);
+        Assert.Contains("lights,", sceneRenderBridgeSource, StringComparison.Ordinal);
+        Assert.Contains("$(SOURCE_DIR)/platform/wii/WiiFramePlan.cpp", makefileSource, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ensures the Wii 2D host keeps one reusable command-list builder alive across frames instead of stack-allocating a generated native helper that owns heap allocations and leaks them every frame.
+    /// </summary>
+    [Fact]
+    public void Packaged2D_WiiRenderManagerOwnsPersistentCommandListBuilder() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string renderManagerHeaderSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRenderManager2D.hpp"));
+        string renderManagerSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRenderManager2D.cpp"));
+
+        Assert.Contains("~WiiRenderManager2D() override;", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("RenderCommandListBuilder2D* CommandListBuilder;", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("CommandListBuilder(new RenderCommandListBuilder2D())", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("WiiRenderManager2D::~WiiRenderManager2D()", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("CommandListBuilder->Dispose();", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("delete CommandListBuilder;", renderManagerSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("RenderCommandListBuilder2D commandListBuilder {}", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("RenderCommandList2D* commandList = CommandListBuilder->Build(camera->get_RenderQueue2D());", renderManagerSource, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ensures the Wii 3D draw path mirrors the GameCube material-aware GX branch instead of the old Wii-only unlit cached-position shortcut.
+    /// </summary>
+    [Fact]
+    public void Packaged3D_ReplicatesGameCubeMaterialAwareRasterPath() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string renderManagerHeaderSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRenderManager3D.hpp"));
+        string renderManagerSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRenderManager3D.cpp"));
+        string rasterRendererHeaderSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRasterRenderer.hpp"));
+        string rasterRendererSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRasterRenderer.cpp"));
+        string runtimeMaterialHeaderSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRuntimeMaterial.hpp"));
+        string runtimeMaterialSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRuntimeMaterial.cpp"));
+        string makefileSource = File.ReadAllText(Path.Combine(repositoryRootPath, "Makefile"));
+
+        Assert.Contains("class WiiRuntimeMaterial;", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("WiiRuntimeMaterial* runtimeMaterial = new WiiRuntimeMaterial();", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("runtimeMaterial->SetBaseColor(float3(", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("runtimeMaterial->SetTextureRelativePath(materialAsset->TextureRelativePath);", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("AttachCookedDiffuseTexture(runtimeMaterial, cookedMaterialAsset, cookedAssetPath);", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("void AttachCookedDiffuseTexture(WiiRuntimeMaterial* runtimeMaterial, PlatformMaterialAsset* materialAsset, const std::string& cookedMaterialAssetPath);", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("RuntimeTexture* runtimeTexture = core->get_RenderManager2D()->BuildTextureFromRaw(textureAsset);", renderManagerSource, StringComparison.Ordinal);
+
+        Assert.Contains("class WiiRuntimeMaterial final : public RuntimeMaterial {", runtimeMaterialHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("float3 GetBaseColor() const;", runtimeMaterialHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("void SetBaseColor(float3 value);", runtimeMaterialHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("const std::string& GetTextureRelativePath() const;", runtimeMaterialHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("void SetTextureRelativePath(std::string value);", runtimeMaterialHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("RuntimeTexture* GetOwnedDiffuseTexture() const;", runtimeMaterialHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("void SetOwnedDiffuseTexture(RuntimeTexture* value);", runtimeMaterialHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("float3 WiiRuntimeMaterial::GetBaseColor() const", runtimeMaterialSource, StringComparison.Ordinal);
+        Assert.Contains("void WiiRuntimeMaterial::SetOwnedDiffuseTexture(RuntimeTexture* value)", runtimeMaterialSource, StringComparison.Ordinal);
+        Assert.Contains("$(SOURCE_DIR)/platform/wii/WiiRuntimeMaterial.cpp", makefileSource, StringComparison.Ordinal);
+
+        Assert.Contains("void ConfigurePipeline(bool useTexturedBranch, bool useIndexedGeometry);", rasterRendererHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("void ConfigureLitPipeline(bool useTexturedBranch, bool useIndexedGeometry);", rasterRendererHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("void BindCachedMeshArrays(WiiCachedMeshData* cachedMeshData, bool useTexturedBranch);", rasterRendererHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("void LoadNormalMatrix(const Mtx& modelViewMatrix);", rasterRendererHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("bool UsesLitBranch(RenderFrameDrawableSubmission* submission);", rasterRendererHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("WiiRuntimeTexture* ResolveBoundTexture(WiiRuntimeMaterial* material);", rasterRendererHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("void DrawCachedLitSubmesh(WiiFramePlan* framePlan, Entity* entity, WiiRuntimeMaterial* material, WiiCachedMeshData* cachedMeshData, RuntimeSubmesh* runtimeSubmesh, bool useTexturedBranch);", rasterRendererHeaderSource, StringComparison.Ordinal);
+
+        Assert.Contains("WiiRuntimeMaterial* wiiRuntimeMaterial = static_cast<WiiRuntimeMaterial*>(material);", rasterRendererSource, StringComparison.Ordinal);
+        Assert.Contains("const bool expectsTexture = !wiiRuntimeMaterial->GetTextureRelativePath().empty();", rasterRendererSource, StringComparison.Ordinal);
+        Assert.Contains("WiiRuntimeTexture* boundTexture = expectsTexture", rasterRendererSource, StringComparison.Ordinal);
+        Assert.Contains("const bool useTexturedBranch = boundTexture != nullptr;", rasterRendererSource, StringComparison.Ordinal);
+        Assert.Contains("const bool useLitBranch = UsesLitBranch(submission);", rasterRendererSource, StringComparison.Ordinal);
+        Assert.Contains("if (useTexturedBranch) {", rasterRendererSource, StringComparison.Ordinal);
+        Assert.Contains("GX_LoadTexObj(boundTexture->GetNativeTextureObject(), GX_TEXMAP0);", rasterRendererSource, StringComparison.Ordinal);
+        Assert.Contains("if (useLitBranch) {", rasterRendererSource, StringComparison.Ordinal);
+        Assert.Contains("LoadNormalMatrix(nativeModelViewMatrix);", rasterRendererSource, StringComparison.Ordinal);
+        Assert.Contains("ConfigureLitPipeline(useTexturedBranch, true);", rasterRendererSource, StringComparison.Ordinal);
+        Assert.Contains("DrawCachedLitSubmesh(framePlan, entity, wiiRuntimeMaterial, cachedMeshData, runtimeSubmesh, useTexturedBranch);", rasterRendererSource, StringComparison.Ordinal);
+        Assert.Contains("ConfigurePipeline(useTexturedBranch, true);", rasterRendererSource, StringComparison.Ordinal);
+        Assert.Contains("DrawCachedSubmesh(wiiRuntimeMaterial, cachedMeshData, runtimeSubmesh, useTexturedBranch);", rasterRendererSource, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Ensures presented Wii frames expose the authored platform version string and honor the active camera clear color instead of the old diagnostic steady-state clears.
     /// </summary>
     [Fact]
@@ -536,6 +669,57 @@ public sealed class WiiRuntimeSourceTests {
     }
 
     /// <summary>
+    /// Ensures the Wii runtime answers Dolphin close requests by registering shutdown callbacks and exiting the frame loop cleanly.
+    /// </summary>
+    [Fact]
+    public void PackagedDebugLogging_RegistersShutdownCallbacksAndExitsFrameLoop() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string applicationSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiApplication.cpp"));
+
+        Assert.Contains("#include <wiiuse/wpad.h>", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("volatile bool ShutdownRequested = false;", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("void HandleResetButtonPressed(u32 resetKind, void* context)", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("void HandlePowerButtonPressed()", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("void HandleWiimotePowerButtonPressed(s32 channel)", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("ShutdownRequested = true;", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("static_cast<void>(resetKind);", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("static_cast<void>(context);", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("SYS_SetResetCallback(HandleResetButtonPressed);", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("SYS_SetPowerCallback(HandlePowerButtonPressed);", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("WPAD_SetPowerButtonCallback(HandleWiimotePowerButtonPressed);", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("while (!ShutdownRequested) {", applicationSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("while (true) {\r\n#if HELENGINE_WII_HAS_GENERATED_CORE", applicationSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("while (true) {\n#if HELENGINE_WII_HAS_GENERATED_CORE", applicationSource, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ensures the Wii host loop uses the scaled XFB height returned by <c>GX_SetDispCopyYScale</c> when configuring the display-copy destination, matching the known-good GameCube GX setup.
+    /// </summary>
+    [Fact]
+    public void Packaged3D_UsesScaledXfbHeightForDisplayCopyDestination() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string applicationSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiApplication.cpp"));
+
+        Assert.Contains("const u16 xfbScaledHeight = GX_SetDispCopyYScale(yScale);", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("GX_SetDispCopyDst(RenderMode->fbWidth, xfbScaledHeight);", applicationSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("GX_SetDispCopyDst(RenderMode->fbWidth, RenderMode->xfbHeight);", applicationSource, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ensures the Wii present loop restores the GX copy state before copying the rendered EFB into the display buffer.
+    /// </summary>
+    [Fact]
+    public void Packaged3D_PresentFrameRestoresCopyStateBeforeDisplayCopy() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string applicationSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiApplication.cpp"));
+
+        Assert.Contains("GX_SetZMode(GX_TRUE, GX_LEQUAL, GX_TRUE);", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("GX_SetColorUpdate(GX_TRUE);", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("GX_SetAlphaUpdate(GX_TRUE);", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("GX_CopyDisp(FrameBuffers[FrameBufferIndex], GX_TRUE);", applicationSource, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Ensures the packaged-disc Wii runtime also writes its trace stream into an emulated NAND path that Dolphin mirrors back into the isolated user directory.
     /// </summary>
     [Fact]
@@ -688,5 +872,57 @@ public sealed class WiiRuntimeSourceTests {
         Assert.DoesNotContain("*reinterpret_cast<volatile uint32_t*>(ArenaHighLowMemoryAddress) = Config.FstLoadAddress;", apploaderSource, StringComparison.Ordinal);
         Assert.Contains("*(.data*)", apploaderLinkerScript, StringComparison.Ordinal);
         Assert.Contains("*(.bss*)", apploaderLinkerScript, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ensures the Wii raster path persists its first-frame 3D probes into a host-readable title-data trace file so packaged emulator runs do not depend on <c>sd:/</c> writes.
+    /// </summary>
+    [Fact]
+    public void Packaged3D_PersistsFirstFrameRasterProbesToHostReadableIsfsTrace() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string rasterRendererSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRasterRenderer.cpp"));
+
+        Assert.Contains("#include <cstdarg>", rasterRendererSource, StringComparison.Ordinal);
+        Assert.Contains("#include <cstdio>", rasterRendererSource, StringComparison.Ordinal);
+        Assert.Contains("#include <ogc/dvd.h>", rasterRendererSource, StringComparison.Ordinal);
+        Assert.Contains("#include <ogc/isfs.h>", rasterRendererSource, StringComparison.Ordinal);
+        Assert.Contains("/title/00010000/%02X%02X%02X%02X/data/%s", rasterRendererSource, StringComparison.Ordinal);
+        Assert.Contains("ISFS_Initialize()", rasterRendererSource, StringComparison.Ordinal);
+        Assert.Contains("ISFS_CreateDir(", rasterRendererSource, StringComparison.Ordinal);
+        Assert.Contains("ISFS_CreateFile(", rasterRendererSource, StringComparison.Ordinal);
+        Assert.Contains("ISFS_Open(", rasterRendererSource, StringComparison.Ordinal);
+        Assert.Contains("ISFS_Write(", rasterRendererSource, StringComparison.Ordinal);
+        Assert.Contains("wii_raster_trace.txt", rasterRendererSource, StringComparison.Ordinal);
+        Assert.Contains("AppendRasterTrace(\"\\n=== Wii raster session %s ===\\n\", __DATE__ \" \" __TIME__);", rasterRendererSource, StringComparison.Ordinal);
+        Assert.Contains("[Wii][MatrixProbe]", rasterRendererSource, StringComparison.Ordinal);
+        Assert.Contains("[Wii][DrawProbe]", rasterRendererSource, StringComparison.Ordinal);
+        Assert.Contains("[Wii] Lighting state:", rasterRendererSource, StringComparison.Ordinal);
+        Assert.Contains("[Wii] First lit draw:", rasterRendererSource, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ensures the Wii indexed GX path binds the shared packed mesh arrays directly instead of routing geometry through Wii-only aligned copies that diverge from the working GameCube submission path.
+    /// </summary>
+    [Fact]
+    public void Packaged3D_BindsSharedPackedMeshArraysInsteadOfWiiOnlyAlignedCopies() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string rasterRendererSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRasterRenderer.cpp"));
+        string meshCacheSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiMeshCache.cpp"));
+        string cachedMeshHeaderSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiCachedMeshData.hpp"));
+        string renderManagerSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRenderManager3D.cpp"));
+
+        Assert.Contains("GX_SetArray(GX_VA_POS, &(*cachedMeshData->PackedPositions)[0], sizeof(WiiPackedPosition3));", rasterRendererSource, StringComparison.Ordinal);
+        Assert.Contains("GX_SetArray(GX_VA_NRM, &(*cachedMeshData->PackedNormals)[0], sizeof(WiiPackedNormal3));", rasterRendererSource, StringComparison.Ordinal);
+        Assert.Contains("GX_SetArray(GX_VA_TEX0, &(*cachedMeshData->PackedTexCoords)[0], sizeof(WiiPackedTexCoord2));", rasterRendererSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("PackedPositionBuffer", rasterRendererSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("PackedNormalBuffer", rasterRendererSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("PackedTexCoordBuffer", rasterRendererSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("memalign(", meshCacheSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("PackedPositionBuffer", cachedMeshHeaderSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("PackedNormalBuffer", cachedMeshHeaderSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("PackedTexCoordBuffer", cachedMeshHeaderSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("free(runtimeModel->CachedMeshData->PackedPositionBuffer);", renderManagerSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("free(runtimeModel->CachedMeshData->PackedNormalBuffer);", renderManagerSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("free(runtimeModel->CachedMeshData->PackedTexCoordBuffer);", renderManagerSource, StringComparison.Ordinal);
     }
 }

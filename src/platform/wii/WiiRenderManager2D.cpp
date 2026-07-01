@@ -33,9 +33,19 @@ namespace helengine::wii {
     /// Creates the Wii 2D render bridge.
     WiiRenderManager2D::WiiRenderManager2D()
         : RenderManager2D()
+        , CommandListBuilder(new RenderCommandListBuilder2D())
         , VisitedCameraCount(0)
         , VisitedDrawableCount(0)
         , DidSubmitGlyph(false) {
+    }
+
+    /// Releases reusable generated command-list helper state owned by the Wii 2D render bridge.
+    WiiRenderManager2D::~WiiRenderManager2D() {
+        if (CommandListBuilder != nullptr) {
+            CommandListBuilder->Dispose();
+            delete CommandListBuilder;
+            CommandListBuilder = nullptr;
+        }
     }
 
     /// Rebuilds one packaged texture asset into a Wii-native runtime texture.
@@ -186,7 +196,6 @@ namespace helengine::wii {
             return;
         }
 
-        RenderCommandListBuilder2D commandListBuilder {};
         List<ICamera*>* cameras = core->get_ObjectManager()->get_Cameras();
         for (int32_t cameraIndex = 0; cameraIndex < cameras->get_Count(); cameraIndex++) {
             CameraComponent* camera = he_cpp_try_cast<CameraComponent>((*cameras)[cameraIndex]);
@@ -194,7 +203,7 @@ namespace helengine::wii {
                 continue;
             }
 
-            RenderCommandList2D* commandList = commandListBuilder.Build(camera->get_RenderQueue2D());
+            RenderCommandList2D* commandList = CommandListBuilder->Build(camera->get_RenderQueue2D());
             if (commandList == nullptr || commandList->get_Count() <= 0) {
                 continue;
             }

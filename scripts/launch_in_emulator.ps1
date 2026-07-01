@@ -122,6 +122,9 @@ Set-Content -LiteralPath (Join-Path $userDir 'Config\Dolphin.ini') -Value @(
     '[Analytics]'
     'Enabled = False'
     'PermissionAsked = True'
+    '[AutoUpdate]'
+    'UpdateTrack = '
+    'HashOverride = '
     '[General]'
     'UseDiscordPresence = False'
     ('WiiSDCardSyncFolder = ' + $sdSyncFolderPath.Replace('\', '/'))

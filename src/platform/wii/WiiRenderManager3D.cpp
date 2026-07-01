@@ -8,6 +8,7 @@
 #include "Asset.hpp"
 #include "AssetSerializer.hpp"
 #include "CameraClearSettings.hpp"
+#include "Core.hpp"
 #include "MaterialBlendMode.hpp"
 #include "MaterialCullMode.hpp"
 #include "MaterialRenderState.hpp"
@@ -19,7 +20,9 @@
 #include "RendererBackendCapabilityProfile.hpp"
 #include "RuntimeMaterial.hpp"
 #include "RuntimeMaterialLightingModel.hpp"
+#include "RuntimeTexture.hpp"
 #include "RuntimeSubmesh.hpp"
+#include "TextureAsset.hpp"
 #include "float2.hpp"
 #include "float3.hpp"
 #include "float4.hpp"
@@ -27,6 +30,7 @@
 #include "platform/wii/WiiMeshCache.hpp"
 #include "platform/wii/WiiRasterRenderer.hpp"
 #include "platform/wii/WiiRenderManager2D.hpp"
+#include "platform/wii/WiiRuntimeMaterial.hpp"
 #include "platform/wii/WiiRuntimeModel.hpp"
 #include "platform/wii/WiiSceneRenderBridge.hpp"
 #include "runtime/array.hpp"
@@ -34,6 +38,7 @@
 #include "runtime/native_cast.hpp"
 #include "runtime/native_exceptions.hpp"
 #include "system/io/file.hpp"
+#include "system/io/path.hpp"
 
 namespace helengine::wii {
     /// Creates the Wii 3D backend and its owned bridge/cache/raster collaborators.
@@ -150,16 +155,18 @@ namespace helengine::wii {
             }
         });
         Asset* asset = AssetSerializer::Deserialize(stream);
-        PlatformMaterialAsset* materialAsset = he_cpp_try_cast<PlatformMaterialAsset>(asset);
-        if (materialAsset == nullptr) {
+        PlatformMaterialAsset* cookedMaterialAsset = he_cpp_try_cast<PlatformMaterialAsset>(asset);
+        if (cookedMaterialAsset == nullptr) {
             delete asset;
             throw new InvalidOperationException("Wii cooked material payload did not deserialize into a PlatformMaterialAsset.");
         }
 
         auto materialAssetGuard = he_cpp_make_scope_exit([&]() {
-            delete materialAsset;
+            delete cookedMaterialAsset;
         });
-        return BuildMaterialFromCooked(materialAsset);
+        WiiRuntimeMaterial* runtimeMaterial = static_cast<WiiRuntimeMaterial*>(BuildMaterialFromCooked(cookedMaterialAsset));
+        AttachCookedDiffuseTexture(runtimeMaterial, cookedMaterialAsset, cookedAssetPath);
+        return runtimeMaterial;
     }
 
     /// Rebuilds one cooked platform-owned material payload into the minimal runtime contract currently consumed by generated scenes.
@@ -168,16 +175,25 @@ namespace helengine::wii {
             throw new ArgumentNullException("materialAsset");
         }
 
-        RuntimeMaterial* runtimeMaterial = new RuntimeMaterial();
+        WiiRuntimeMaterial* runtimeMaterial = new WiiRuntimeMaterial();
         runtimeMaterial->set_Id(materialAsset->get_Id());
         runtimeMaterial->SetRenderState(BuildMaterialRenderState(materialAsset));
         runtimeMaterial->set_LightingModel(materialAsset->Lit
             ? RuntimeMaterialLightingModel::MetalRoughPbr
             : RuntimeMaterialLightingModel::Unlit);
+        runtimeMaterial->SetBaseColor(float3(
+            static_cast<float>(materialAsset->BaseColorR) / 255.0f,
+            static_cast<float>(materialAsset->BaseColorG) / 255.0f,
+            static_cast<float>(materialAsset->BaseColorB) / 255.0f));
+        runtimeMaterial->SetTextureRelativePath(materialAsset->TextureRelativePath);
         runtimeMaterial->set_SupportsNormalMapping(false);
         runtimeMaterial->set_SupportsEmissive(false);
         runtimeMaterial->set_CastsShadows(materialAsset->Lit);
         runtimeMaterial->set_ReceivesShadows(materialAsset->Lit);
+        if (materialAsset->DoubleSided) {
+            runtimeMaterial->get_RenderState()->set_CullMode(MaterialCullMode::None);
+        }
+
         return runtimeMaterial;
     }
 
@@ -206,8 +222,20 @@ namespace helengine::wii {
                 continue;
             }
 
-            material->Dispose();
-            delete material;
+            WiiRuntimeMaterial* runtimeMaterial = static_cast<WiiRuntimeMaterial*>(material);
+            RuntimeTexture* ownedDiffuseTexture = runtimeMaterial->GetOwnedDiffuseTexture();
+            if (ownedDiffuseTexture != nullptr) {
+                Core* core = Core::get_Instance();
+                if (core == nullptr || core->get_RenderManager2D() == nullptr) {
+                    throw new InvalidOperationException("Wii material release requires an active RenderManager2D to release material-owned diffuse textures.");
+                }
+
+                core->get_RenderManager2D()->ReleaseTexture(ownedDiffuseTexture);
+                runtimeMaterial->SetOwnedDiffuseTexture(nullptr);
+            }
+
+            runtimeMaterial->Dispose();
+            delete runtimeMaterial;
         }
 
         ReleasedMaterials.clear();
@@ -234,24 +262,12 @@ namespace helengine::wii {
                     delete runtimeModel->CachedMeshData->PackedPositions;
                 }
 
-                if (runtimeModel->CachedMeshData->PackedPositionBuffer != nullptr) {
-                    free(runtimeModel->CachedMeshData->PackedPositionBuffer);
-                }
-
                 if (runtimeModel->CachedMeshData->PackedNormals != nullptr && runtimeModel->CachedMeshData->PackedNormals != Array<WiiPackedNormal3>::Empty()) {
                     delete runtimeModel->CachedMeshData->PackedNormals;
                 }
 
-                if (runtimeModel->CachedMeshData->PackedNormalBuffer != nullptr) {
-                    free(runtimeModel->CachedMeshData->PackedNormalBuffer);
-                }
-
                 if (runtimeModel->CachedMeshData->PackedTexCoords != nullptr && runtimeModel->CachedMeshData->PackedTexCoords != Array<WiiPackedTexCoord2>::Empty()) {
                     delete runtimeModel->CachedMeshData->PackedTexCoords;
-                }
-
-                if (runtimeModel->CachedMeshData->PackedTexCoordBuffer != nullptr) {
-                    free(runtimeModel->CachedMeshData->PackedTexCoordBuffer);
                 }
 
                 if (runtimeModel->CachedMeshData->Indices16 != nullptr && runtimeModel->CachedMeshData->Indices16 != Array<uint16_t>::Empty()) {
@@ -413,6 +429,77 @@ namespace helengine::wii {
         renderState->set_DepthTestEnabled(true);
         renderState->set_DepthWriteEnabled(materialAsset->BaseColorA >= 0xFF);
         return renderState;
+    }
+
+    /// Resolves one packaged content-relative asset path against the absolute cooked material path that referenced it.
+    std::string WiiRenderManager3D::ResolvePackagedContentAssetPath(const std::string& cookedMaterialAssetPath, const std::string& contentRelativePath) {
+        if (cookedMaterialAssetPath.empty()) {
+            throw new ArgumentException("Wii cooked material path is required.", "cookedMaterialAssetPath");
+        } else if (contentRelativePath.empty()) {
+            throw new ArgumentException("Wii content-relative asset path is required.", "contentRelativePath");
+        }
+
+        std::string normalizedMaterialAssetPath = cookedMaterialAssetPath;
+        std::replace(normalizedMaterialAssetPath.begin(), normalizedMaterialAssetPath.end(), '\\', '/');
+        const std::size_t cookedMarkerIndex = normalizedMaterialAssetPath.find("/cooked/");
+        if (cookedMarkerIndex == std::string::npos) {
+            throw new InvalidOperationException("Wii cooked material path must contain the packaged '/cooked/' root segment.");
+        }
+
+        const std::string contentRootPath = cookedMaterialAssetPath.substr(0, cookedMarkerIndex);
+        return Path::GetFullPath(Path::Combine(contentRootPath, contentRelativePath));
+    }
+
+    /// Loads and attaches one cooked diffuse texture when the path-based Wii cooked-material contract references one.
+    void WiiRenderManager3D::AttachCookedDiffuseTexture(WiiRuntimeMaterial* runtimeMaterial, PlatformMaterialAsset* materialAsset, const std::string& cookedMaterialAssetPath) {
+        if (runtimeMaterial == nullptr) {
+            throw new ArgumentNullException("runtimeMaterial");
+        } else if (materialAsset == nullptr) {
+            throw new ArgumentNullException("materialAsset");
+        } else if (cookedMaterialAssetPath.empty()) {
+            throw new ArgumentException("Wii cooked material path is required.", "cookedMaterialAssetPath");
+        }
+
+        if (materialAsset->TextureRelativePath.empty()) {
+            return;
+        }
+
+        const std::string cookedTextureAssetPath = ResolvePackagedContentAssetPath(cookedMaterialAssetPath, materialAsset->TextureRelativePath);
+        FileStream* textureStream = File::OpenRead(cookedTextureAssetPath.c_str());
+        try {
+            Asset* textureAssetPayload = AssetSerializer::Deserialize(textureStream);
+            TextureAsset* textureAsset = he_cpp_try_cast<TextureAsset>(textureAssetPayload);
+            if (textureAsset == nullptr) {
+                delete textureAssetPayload;
+                throw new InvalidOperationException("Wii cooked diffuse texture payload did not deserialize as TextureAsset.");
+            }
+
+            Core* core = Core::get_Instance();
+            if (core == nullptr || core->get_RenderManager2D() == nullptr) {
+                throw new InvalidOperationException("Wii cooked diffuse texture attachment requires an active RenderManager2D.");
+            }
+
+            textureStream->Dispose();
+            RuntimeTexture* runtimeTexture = core->get_RenderManager2D()->BuildTextureFromRaw(textureAsset);
+            runtimeMaterial->SetOwnedDiffuseTexture(runtimeTexture);
+            if (textureAsset->Colors != nullptr && textureAsset->Colors != Array<uint8_t>::Empty()) {
+                delete textureAsset->Colors;
+                textureAsset->Colors = Array<uint8_t>::Empty();
+            }
+
+            if (textureAsset->PaletteColors != nullptr && textureAsset->PaletteColors != Array<uint8_t>::Empty()) {
+                delete textureAsset->PaletteColors;
+                textureAsset->PaletteColors = Array<uint8_t>::Empty();
+            }
+
+            delete textureAsset;
+        } catch (...) {
+            if (textureStream != nullptr) {
+                textureStream->Dispose();
+            }
+
+            throw;
+        }
     }
 
     /// Releases one transient cooked/raw model asset after the shared runtime model has been rebuilt.

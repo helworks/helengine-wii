@@ -76,6 +76,10 @@ namespace helengine::wii {
         MultiplyMatrices(view, projection, viewProjection);
         return new WiiFramePlan(
             camera,
+            extraction,
+            cameras,
+            drawables,
+            lights,
             frame->get_DrawableSubmissions(),
             frame->get_LightSubmissions(),
             logicalViewport,

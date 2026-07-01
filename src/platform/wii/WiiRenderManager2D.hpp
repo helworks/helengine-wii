@@ -39,6 +39,9 @@ namespace helengine::wii {
         /// Creates the Wii 2D render bridge.
         WiiRenderManager2D();
 
+        /// Releases reusable native command-builder state owned by the Wii 2D render bridge.
+        ~WiiRenderManager2D() override;
+
         /// Rebuilds one packaged texture asset into a Wii-native runtime texture.
         RuntimeTexture* BuildTextureFromRaw(TextureAsset* data) override;
 
@@ -132,6 +135,9 @@ namespace helengine::wii {
 
         /// Captured rounded-rectangle draw requests in shared-engine render order.
         std::vector<WiiRoundedRectDrawCommand> RoundedRectQueue;
+
+        /// Reusable generated 2D command builder kept alive across frames so its native helper allocations are not leaked by per-frame reconstruction.
+        RenderCommandListBuilder2D* CommandListBuilder;
 
         /// Number of enabled cameras visited during the current frame capture.
         int32_t VisitedCameraCount;

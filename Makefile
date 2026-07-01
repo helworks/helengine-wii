@@ -77,6 +77,8 @@ GENERATED_BRIDGE_SOURCES := \
 	$(SOURCE_DIR)/platform/wii/WiiRenderManager2D.cpp \
 	$(SOURCE_DIR)/platform/wii/WiiRenderManager3D.cpp \
 	$(SOURCE_DIR)/platform/wii/WiiSceneRenderBridge.cpp \
+	$(SOURCE_DIR)/platform/wii/WiiFramePlan.cpp \
+	$(SOURCE_DIR)/platform/wii/WiiRuntimeMaterial.cpp \
 	$(SOURCE_DIR)/platform/wii/WiiRuntimeModel.cpp \
 	$(SOURCE_DIR)/platform/wii/WiiRuntimeTexture.cpp \
 	$(SOURCE_DIR)/platform/wii/WiiDiscFileSystem.cpp \

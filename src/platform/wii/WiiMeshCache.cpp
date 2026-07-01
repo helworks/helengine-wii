@@ -1,8 +1,6 @@
 #include "platform/wii/WiiMeshCache.hpp"
 
-#include <cstring>
 #include <limits>
-#include <malloc.h>
 
 #include <ogc/cache.h>
 
@@ -65,15 +63,6 @@ namespace helengine::wii {
                 position.Z
             };
         }
-        cachedMeshData->PackedPositionBuffer = static_cast<WiiPackedPosition3*>(memalign(32, sizeof(WiiPackedPosition3) * static_cast<size_t>(cachedMeshData->PackedPositions->Length)));
-        if (cachedMeshData->PackedPositionBuffer == nullptr) {
-            throw new InvalidOperationException("Wii cached mesh build could not allocate an aligned packed position buffer.");
-        }
-
-        std::memcpy(
-            cachedMeshData->PackedPositionBuffer,
-            &(*cachedMeshData->PackedPositions)[0],
-            sizeof(WiiPackedPosition3) * static_cast<size_t>(cachedMeshData->PackedPositions->Length));
 
         if (runtimeModel->Normals != nullptr && runtimeModel->Normals != Array<float3>::Empty()) {
             if (runtimeModel->Normals->Length != runtimeModel->Positions->Length) {
@@ -89,15 +78,6 @@ namespace helengine::wii {
                     normal.Z
                 };
             }
-            cachedMeshData->PackedNormalBuffer = static_cast<WiiPackedNormal3*>(memalign(32, sizeof(WiiPackedNormal3) * static_cast<size_t>(cachedMeshData->PackedNormals->Length)));
-            if (cachedMeshData->PackedNormalBuffer == nullptr) {
-                throw new InvalidOperationException("Wii cached mesh build could not allocate an aligned packed normal buffer.");
-            }
-
-            std::memcpy(
-                cachedMeshData->PackedNormalBuffer,
-                &(*cachedMeshData->PackedNormals)[0],
-                sizeof(WiiPackedNormal3) * static_cast<size_t>(cachedMeshData->PackedNormals->Length));
 
             cachedMeshData->Normals = runtimeModel->Normals;
             cachedMeshData->HasNormals = true;
@@ -116,15 +96,6 @@ namespace helengine::wii {
                     texCoord.Y
                 };
             }
-            cachedMeshData->PackedTexCoordBuffer = static_cast<WiiPackedTexCoord2*>(memalign(32, sizeof(WiiPackedTexCoord2) * static_cast<size_t>(cachedMeshData->PackedTexCoords->Length)));
-            if (cachedMeshData->PackedTexCoordBuffer == nullptr) {
-                throw new InvalidOperationException("Wii cached mesh build could not allocate an aligned packed texture-coordinate buffer.");
-            }
-
-            std::memcpy(
-                cachedMeshData->PackedTexCoordBuffer,
-                &(*cachedMeshData->PackedTexCoords)[0],
-                sizeof(WiiPackedTexCoord2) * static_cast<size_t>(cachedMeshData->PackedTexCoords->Length));
 
             cachedMeshData->HasTexCoords = true;
         }
@@ -175,14 +146,14 @@ namespace helengine::wii {
             }
         }
 
-        DCFlushRange(cachedMeshData->PackedPositionBuffer, static_cast<u32>(cachedMeshData->PackedPositions->Length * sizeof(WiiPackedPosition3)));
+        DCFlushRange(&(*cachedMeshData->PackedPositions)[0], static_cast<u32>(cachedMeshData->PackedPositions->Length * sizeof(WiiPackedPosition3)));
         if (cachedMeshData->HasNormals) {
-            DCFlushRange(cachedMeshData->PackedNormalBuffer, static_cast<u32>(cachedMeshData->PackedNormals->Length * sizeof(WiiPackedNormal3)));
+            DCFlushRange(&(*cachedMeshData->PackedNormals)[0], static_cast<u32>(cachedMeshData->PackedNormals->Length * sizeof(WiiPackedNormal3)));
             DCFlushRange(&(*cachedMeshData->Normals)[0], static_cast<u32>(cachedMeshData->Normals->Length * sizeof(float3)));
         }
 
         if (cachedMeshData->HasTexCoords) {
-            DCFlushRange(cachedMeshData->PackedTexCoordBuffer, static_cast<u32>(cachedMeshData->PackedTexCoords->Length * sizeof(WiiPackedTexCoord2)));
+            DCFlushRange(&(*cachedMeshData->PackedTexCoords)[0], static_cast<u32>(cachedMeshData->PackedTexCoords->Length * sizeof(WiiPackedTexCoord2)));
         }
 
         DCFlushRange(&(*cachedMeshData->Indices16)[0], static_cast<u32>(cachedMeshData->Indices16->Length * sizeof(uint16_t)));

@@ -22,6 +22,7 @@ namespace helengine::wii {
     class WiiMeshCache;
     class WiiRasterRenderer;
     class WiiRenderManager2D;
+    class WiiRuntimeMaterial;
     class WiiRuntimeModel;
     class WiiSceneRenderBridge;
 
@@ -130,6 +131,12 @@ namespace helengine::wii {
 
         /// Rebuilds one material render-state instance from the cooked Wii material payload flags.
         static MaterialRenderState* BuildMaterialRenderState(PlatformMaterialAsset* materialAsset);
+
+        /// Resolves one packaged content-relative asset path against the absolute cooked material path that referenced it.
+        std::string ResolvePackagedContentAssetPath(const std::string& cookedMaterialAssetPath, const std::string& contentRelativePath);
+
+        /// Loads and attaches one cooked diffuse texture when the path-based Wii cooked-material contract references one.
+        void AttachCookedDiffuseTexture(WiiRuntimeMaterial* runtimeMaterial, PlatformMaterialAsset* materialAsset, const std::string& cookedMaterialAssetPath);
 
         /// Releases one transient cooked/raw model asset after the shared runtime model has been rebuilt.
         static void ReleaseTransientModelAsset(ModelAsset* asset);

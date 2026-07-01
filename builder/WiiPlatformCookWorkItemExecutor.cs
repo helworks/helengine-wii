@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using helengine.baseplatform.Manifest;
 using helengine.editor;
 using FilesAssetSerializer = helengine.files.AssetSerializer;
+using FilesEngineBinaryHeaderSerializer = helengine.files.EngineBinaryHeaderSerializer;
 using FilesFontAssetBinarySerializer = helengine.files.FontAssetBinarySerializer;
 
 namespace helengine.wii.builder;
@@ -68,48 +69,13 @@ public sealed class WiiPlatformCookWorkItemExecutor {
     /// Executes one builder-owned font-atlas texture work item into the staging root.
     /// </summary>
     /// <param name="workItem">Font-atlas work item emitted by the editor build graph.</param>
-    /// <param name="projectRootPath">Project root used to resolve the source font asset.</param>
-    /// <param name="stagingRootPath">Staging root that receives the cooked font asset.</param>
+    /// <param name="projectRootPath">Project root used to resolve the generated atlas texture asset.</param>
+    /// <param name="stagingRootPath">Staging root that receives the cooked texture asset.</param>
     void ExecuteFontAtlasTextureWorkItem(PlatformCookWorkItem workItem, string projectRootPath, string stagingRootPath) {
-        string sourcePath = ResolveSourceAssetPath(projectRootPath, workItem.SourceAssetPath);
-        FontAsset sourceFont = sourcePath.EndsWith(".hefont", StringComparison.OrdinalIgnoreCase)
-            ? ReadFontAsset(sourcePath)
-            : ImportSourceFont(workItem, sourcePath);
-        if (sourceFont.SourceTextureAsset == null) {
-            throw new InvalidOperationException($"Font asset '{workItem.SourceAssetPath}' did not contain a source texture atlas.");
-        }
-
         WiiTextureCookSettings settings = WiiTextureCookSettings.Parse(workItem.SerializedPlatformSettings);
-        TextureAsset cookedTexture = TextureCooker.CookTexture(sourceFont.SourceTextureAsset, settings);
+        TextureAsset sourceTexture = LoadSourceTexture(workItem, projectRootPath);
+        TextureAsset cookedTexture = TextureCooker.CookTexture(sourceTexture, settings);
         WriteTextureAsset(Path.Combine(stagingRootPath, NormalizePath(workItem.OutputRelativePath)), cookedTexture);
-    }
-
-    /// <summary>
-    /// Imports one source font file into a raw font asset that still owns its RGBA32 atlas texture.
-    /// </summary>
-    /// <param name="workItem">Font-atlas work item emitted by the editor build graph.</param>
-    /// <param name="sourcePath">Absolute source path to the authored font file.</param>
-    /// <returns>Imported font asset ready for Wii atlas cooking.</returns>
-    static FontAsset ImportSourceFont(PlatformCookWorkItem workItem, string sourcePath) {
-        if (workItem == null) {
-            throw new ArgumentNullException(nameof(workItem));
-        } else if (string.IsNullOrWhiteSpace(sourcePath)) {
-            throw new ArgumentException("Source path must be provided.", nameof(sourcePath));
-        } else if (!File.Exists(sourcePath)) {
-            throw new FileNotFoundException("Font source file was not found.", sourcePath);
-        }
-
-        using FileStream stream = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read);
-        FontAsset sourceFont = new GdiFontImporter().ImportFont(stream);
-        if (sourceFont.SourceTextureAsset == null) {
-            throw new InvalidOperationException($"Font importer did not produce a source atlas for '{workItem.SourceAssetPath}'.");
-        }
-
-        string sourceAssetId = ResolveMetadataValue(workItem, "source-asset-id");
-        string fontAtlasAssetId = sourceAssetId + "#atlas";
-        sourceFont.SourceTextureAsset.Id = fontAtlasAssetId;
-        sourceFont.SourceTextureAsset.RuntimeAssetId = RuntimeAssetIdGenerator.Generate(fontAtlasAssetId);
-        return sourceFont;
     }
 
     /// <summary>
@@ -126,7 +92,11 @@ public sealed class WiiPlatformCookWorkItemExecutor {
         }
 
         string sourcePath = ResolveSourceAssetPath(projectRootPath, workItem.SourceAssetPath);
-        using Bitmap sourceBitmap = new Bitmap(sourcePath);
+        if (TryReadTextureAsset(sourcePath, out TextureAsset textureAsset)) {
+            return textureAsset;
+        }
+
+        using Bitmap sourceBitmap = new Bitmap(ResolveBitmapSourcePath(sourcePath));
         int width = sourceBitmap.Width;
         int height = sourceBitmap.Height;
         if (width < 1 || height < 1 || width > ushort.MaxValue || height > ushort.MaxValue) {
@@ -188,6 +158,94 @@ public sealed class WiiPlatformCookWorkItemExecutor {
         }
 
         return colors;
+    }
+
+    /// <summary>
+    /// Attempts to read one serialized texture asset from an authored HELE file path.
+    /// </summary>
+    /// <param name="sourcePath">Absolute source path to inspect.</param>
+    /// <param name="textureAsset">Deserialized texture asset when the file stores one.</param>
+    /// <returns>True when the source path stored a texture asset; otherwise false.</returns>
+    static bool TryReadTextureAsset(string sourcePath, out TextureAsset textureAsset) {
+        textureAsset = null;
+        if (string.IsNullOrWhiteSpace(sourcePath)) {
+            throw new ArgumentException("Source path must be provided.", nameof(sourcePath));
+        }
+
+        string extension = Path.GetExtension(sourcePath);
+        if (!string.Equals(extension, ".hasset", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(extension, ".hetex", StringComparison.OrdinalIgnoreCase)) {
+            return false;
+        }
+
+        using FileStream stream = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        EngineBinaryHeader header;
+        try {
+            header = FilesEngineBinaryHeaderSerializer.Read(stream);
+        } catch (InvalidOperationException) {
+            return false;
+        }
+
+        if (header.RecordKind != (ushort)EditorBinaryRecordKind.Asset) {
+            return false;
+        }
+
+        stream.Position = 0;
+        textureAsset = FilesAssetSerializer.Deserialize(stream) as TextureAsset;
+        return textureAsset != null;
+    }
+
+    /// <summary>
+    /// Resolves the bitmap source path that should be imported when one work-item source path is not a serialized texture asset.
+    /// </summary>
+    /// <param name="sourcePath">Absolute authored source path emitted by the editor work item.</param>
+    /// <returns>Absolute bitmap source path that System.Drawing can load.</returns>
+    static string ResolveBitmapSourcePath(string sourcePath) {
+        if (string.IsNullOrWhiteSpace(sourcePath)) {
+            throw new ArgumentException("Source path must be provided.", nameof(sourcePath));
+        }
+
+        if (TryResolveImportSettingsSiblingSourcePath(sourcePath, out string siblingSourcePath)) {
+            return siblingSourcePath;
+        }
+
+        return sourcePath;
+    }
+
+    /// <summary>
+    /// Attempts to resolve the sibling authored image path for one import-settings sidecar.
+    /// </summary>
+    /// <param name="sourcePath">Absolute work-item source path that may point at one `.hasset` import-settings sidecar.</param>
+    /// <param name="siblingSourcePath">Resolved authored image path when one matching sibling exists.</param>
+    /// <returns>True when one sibling source image was found beside the import-settings file; otherwise false.</returns>
+    static bool TryResolveImportSettingsSiblingSourcePath(string sourcePath, out string siblingSourcePath) {
+        siblingSourcePath = string.Empty;
+        if (string.IsNullOrWhiteSpace(sourcePath)) {
+            throw new ArgumentException("Source path must be provided.", nameof(sourcePath));
+        }
+
+        if (!string.Equals(Path.GetExtension(sourcePath), ".hasset", StringComparison.OrdinalIgnoreCase)) {
+            return false;
+        }
+
+        string directoryPath = Path.GetDirectoryName(sourcePath) ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(directoryPath) || !Directory.Exists(directoryPath)) {
+            return false;
+        }
+
+        string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(sourcePath);
+        string[] candidateExtensions = [".png", ".tga", ".jpg", ".jpeg", ".bmp"];
+        for (int index = 0; index < candidateExtensions.Length; index++) {
+            string candidatePath = Path.Combine(directoryPath, fileNameWithoutExtension + candidateExtensions[index]);
+            if (!File.Exists(candidatePath)) {
+                continue;
+            }
+
+            siblingSourcePath = candidatePath;
+            return true;
+        }
+
+        return false;
     }
 
     /// <summary>

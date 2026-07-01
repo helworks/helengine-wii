@@ -12,6 +12,7 @@
 #include <ogc/dvd.h>
 #include <ogc/isfs.h>
 #include <ogc/system.h>
+#include <wiiuse/wpad.h>
 
 #if HELENGINE_WII_HAS_GENERATED_CORE
 #include "Core.hpp"
@@ -42,6 +43,7 @@ namespace helengine::wii {
     }
 
     namespace {
+        volatile bool ShutdownRequested = false;
         constexpr std::size_t DefaultFifoSize = 256 * 1024;
         constexpr GXColor PinkClearColor { 0xFF, 0x69, 0xB4, 0xFF };
         constexpr GXColor FailureClearColor { 0xFF, 0x00, 0x00, 0xFF };
@@ -53,6 +55,48 @@ namespace helengine::wii {
         bool RuntimeTraceIsfsInitializationAttempted = false;
         bool RuntimeTraceIsfsAvailable = false;
         char RuntimeTraceIsfsPath[144] {};
+
+        /// <summary>
+        /// Records one host-owned shutdown request so the main Wii frame loop can exit cleanly.
+        /// </summary>
+        void RequestShutdown() {
+            ShutdownRequested = true;
+        }
+
+        /// <summary>
+        /// Handles the Wii console reset button by stopping the current emulation session.
+        /// </summary>
+        void HandleResetButtonPressed(u32 resetKind, void* context) {
+            static_cast<void>(resetKind);
+            static_cast<void>(context);
+            RequestShutdown();
+        }
+
+        /// <summary>
+        /// Handles the Wii console power button by stopping the current emulation session.
+        /// </summary>
+        void HandlePowerButtonPressed() {
+            RequestShutdown();
+        }
+
+        /// <summary>
+        /// Handles the Wii Remote power button by stopping the current emulation session.
+        /// </summary>
+        /// <param name="channel">Controller channel that issued the power request.</param>
+        void HandleWiimotePowerButtonPressed(s32 channel) {
+            static_cast<void>(channel);
+            RequestShutdown();
+        }
+
+        /// <summary>
+        /// Registers Wii host shutdown callbacks so Dolphin close requests can terminate the guest on the first attempt.
+        /// </summary>
+        void RegisterShutdownCallbacks() {
+            ShutdownRequested = false;
+            SYS_SetResetCallback(HandleResetButtonPressed);
+            SYS_SetPowerCallback(HandlePowerButtonPressed);
+            WPAD_SetPowerButtonCallback(HandleWiimotePowerButtonPressed);
+        }
 
         /// <summary>
         /// Creates one host-readable per-title trace file path under the emulated Wii save-data tree.
@@ -233,6 +277,7 @@ namespace helengine::wii {
 
     /// Initializes the native host and enters the steady-state frame loop.
     int WiiApplication::Run() {
+        RegisterShutdownCallbacks();
         if (!InitializeVideo()) {
             return 1;
         }
@@ -243,13 +288,15 @@ namespace helengine::wii {
 
 #if HELENGINE_WII_HAS_GENERATED_CORE
         if (!InitializeEngineCore()) {
-            while (true) {
+            while (!ShutdownRequested) {
                 PresentFrame();
             }
+
+            return 0;
         }
 #endif
 
-        while (true) {
+        while (!ShutdownRequested) {
 #if HELENGINE_WII_HAS_GENERATED_CORE
             if (!UpdateEngineCore()) {
                 PresentFrame();
@@ -266,6 +313,8 @@ namespace helengine::wii {
                 return 0;
             }
         }
+
+        return 0;
     }
 
     /// Initializes the VI display state and allocates the external framebuffers.
@@ -311,7 +360,7 @@ namespace helengine::wii {
 
         GX_SetScissor(0, 0, RenderMode->fbWidth, RenderMode->efbHeight);
         GX_SetDispCopySrc(0, 0, RenderMode->fbWidth, RenderMode->efbHeight);
-        GX_SetDispCopyDst(RenderMode->fbWidth, RenderMode->xfbHeight);
+        GX_SetDispCopyDst(RenderMode->fbWidth, xfbScaledHeight);
         GX_SetCopyFilter(RenderMode->aa, RenderMode->sample_pattern, GX_TRUE, RenderMode->vfilter);
         GX_SetFieldMode(RenderMode->field_rendering, ((RenderMode->viHeight == (RenderMode->xfbHeight * 2)) ? GX_ENABLE : GX_DISABLE));
         GX_SetPixelFmt(GX_PF_RGBA6_Z24, GX_ZC_LINEAR);
@@ -653,6 +702,9 @@ namespace helengine::wii {
     void WiiApplication::PresentFrame() {
         GX_SetCopyClear(ResolvePresentedClearColor(), 0x00FFFFFF);
         FrameBufferIndex ^= 1U;
+        GX_SetZMode(GX_TRUE, GX_LEQUAL, GX_TRUE);
+        GX_SetColorUpdate(GX_TRUE);
+        GX_SetAlphaUpdate(GX_TRUE);
         GX_CopyDisp(FrameBuffers[FrameBufferIndex], GX_TRUE);
         GX_DrawDone();
         GX_Flush();

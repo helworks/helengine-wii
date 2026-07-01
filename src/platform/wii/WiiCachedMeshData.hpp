@@ -33,12 +33,9 @@ namespace helengine::wii {
         /// Creates an empty cached mesh container before cached arrays are attached.
         WiiCachedMeshData()
             : PackedPositions(nullptr)
-            , PackedPositionBuffer(nullptr)
             , PackedNormals(nullptr)
             , Normals(nullptr)
-            , PackedNormalBuffer(nullptr)
             , PackedTexCoords(nullptr)
-            , PackedTexCoordBuffer(nullptr)
             , Indices16(nullptr)
             , SubmeshIndexStarts(nullptr)
             , SubmeshIndexCounts(nullptr)
@@ -49,23 +46,14 @@ namespace helengine::wii {
         /// Packed positions stored for the default Wii indexed draw path.
         Array<WiiPackedPosition3>* PackedPositions;
 
-        /// 32-byte-aligned packed position buffer bound directly to GX.
-        WiiPackedPosition3* PackedPositionBuffer;
-
         /// Packed normals stored for later lit Wii draw paths.
         Array<WiiPackedNormal3>* PackedNormals;
 
         /// Cached normals stored when the source mesh supports lit rendering.
         Array<float3>* Normals;
 
-        /// 32-byte-aligned packed normal buffer bound directly to GX for later lit paths.
-        WiiPackedNormal3* PackedNormalBuffer;
-
         /// Packed texture coordinates stored when the source mesh supports textured rendering.
         Array<WiiPackedTexCoord2>* PackedTexCoords;
-
-        /// 32-byte-aligned packed texture-coordinate buffer bound directly to GX for later textured paths.
-        WiiPackedTexCoord2* PackedTexCoordBuffer;
 
         /// Cached 16-bit indices used by the Wii draw path.
         Array<uint16_t>* Indices16;
