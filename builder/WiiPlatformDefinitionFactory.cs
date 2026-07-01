@@ -35,6 +35,13 @@ public static class WiiPlatformDefinitionFactory {
     const string WiiNativeFileSystemType = "helengine::wii::WiiDiscFileSystem";
 
     /// <summary>
+    /// Helengine-owned portable-input preprocessor symbols required by the Wii generated-core GX matrix ABI.
+    /// </summary>
+    static readonly IReadOnlyList<string> RuntimePortableInputPreprocessorSymbols = [
+        PortableInputPreprocessorSymbolCatalog.MatrixAbiGxGameCubeWiiSymbol
+    ];
+
+    /// <summary>
     /// Creates the serialized default Wii texture settings contract used when assets do not provide an explicit Wii override.
     /// </summary>
     /// <returns>Serialized default Wii texture settings.</returns>
@@ -322,7 +329,8 @@ public static class WiiPlatformDefinitionFactory {
             new RuntimeGenerationContract(
                 RuntimeMaterialResolutionMode.CookedPlatformOwned,
                 true,
-                PackagedPathPolicy.ContentRelativeOnly),
+                PackagedPathPolicy.ContentRelativeOnly,
+                RuntimePortableInputPreprocessorSymbols),
             assetCookCapabilities: [
                 new PlatformAssetCookCapabilityDefinition(
                     "texture",

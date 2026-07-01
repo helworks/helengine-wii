@@ -27,5 +27,6 @@ public sealed class WiiPlatformDefinitionFactoryTests {
         Assert.Equal("4", pointerSizeSetting.DefaultValue);
         Assert.Equal("\"platform/wii/WiiDiscFileSystem.hpp\"", nativeFileSystemHeaderSetting.DefaultValue);
         Assert.Equal("helengine::wii::WiiDiscFileSystem", nativeFileSystemTypeSetting.DefaultValue);
+        Assert.Contains(PortableInputPreprocessorSymbolCatalog.MatrixAbiGxGameCubeWiiSymbol, definition.RuntimeGenerationContract.PortableInputPreprocessorSymbols);
     }
 }
