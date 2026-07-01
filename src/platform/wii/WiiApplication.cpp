@@ -22,6 +22,9 @@
 #include "InputDeviceKind.hpp"
 #include "InputGamepadButton.hpp"
 #include "PlatformInfo.hpp"
+#if HELENGINE_WII_HAS_PHYSICS3D_RUNTIME_REGISTRATION
+#include "Physics3DRuntimeComponentRegistration.hpp"
+#endif
 #include "RuntimeSceneLoadService.hpp"
 #include "SceneManager.hpp"
 #include "SceneLoadMode.hpp"
@@ -460,6 +463,12 @@ namespace helengine::wii {
             EngineCore->Initialize(EngineRenderManager3D, EngineRenderManager2D, EngineInputManager, EnginePlatformInfo, options);
             SYS_Report("[Wii] Engine core initialized.\n");
             AppendRuntimeTrace("[WiiFile] Engine core initialized.\n");
+#if HELENGINE_WII_HAS_PHYSICS3D_RUNTIME_REGISTRATION
+            initializationStage = "RegisterPhysicsRuntime";
+            Physics3DRuntimeComponentRegistration::Register(EngineCore);
+            SYS_Report("[Wii] Physics runtime registered.\n");
+            AppendRuntimeTrace("[WiiFile] Physics runtime registered.\n");
+#endif
         }
         catch (const std::exception& exception) {
             EngineInitialized = false;

@@ -87,6 +87,22 @@ public sealed class WiiRuntimeSourceTests {
     }
 
     /// <summary>
+    /// Ensures the Wii host registers the 3D physics runtime only when the generated core exported the registration header.
+    /// </summary>
+    [Fact]
+    public void PackagedBootstrap_RegistersPhysicsRuntimeConditionallyBeforeStartupSceneLoad() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string makefileSource = File.ReadAllText(Path.Combine(repositoryRootPath, "Makefile"));
+        string applicationSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiApplication.cpp"));
+
+        Assert.Contains("HELENGINE_WII_HAS_PHYSICS3D_RUNTIME_REGISTRATION", makefileSource, StringComparison.Ordinal);
+        Assert.Contains("#if HELENGINE_WII_HAS_PHYSICS3D_RUNTIME_REGISTRATION", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("#include \"Physics3DRuntimeComponentRegistration.hpp\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("Physics3DRuntimeComponentRegistration::Register(EngineCore);", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("EngineCore->get_SceneManager()->LoadScene(packagedStartupSceneId, SceneLoadMode::Single);", applicationSource, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Ensures the direct-DOL Wii runtime reports the queued startup scene and the first generated scene/content trace state needed to prove authored scene loading.
     /// </summary>
     [Fact]
