@@ -68,7 +68,8 @@ namespace helengine::wii {
     }
 
     /// Rebuilds one platform-owned cooked texture payload into a Wii-native runtime texture.
-    RuntimeTexture* WiiRenderManager2D::BuildTextureFromCooked(std::string cookedAssetPath) {
+    RuntimeTexture* WiiRenderManager2D::BuildTextureFromCooked(std::string cookedAssetPath, IContentStreamSource* contentStreamSource) {
+        (void)contentStreamSource;
         if (cookedAssetPath.empty()) {
             throw new ArgumentException("Wii cooked texture path is required.", "cookedAssetPath");
         }

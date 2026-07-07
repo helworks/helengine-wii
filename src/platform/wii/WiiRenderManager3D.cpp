@@ -75,7 +75,7 @@ namespace helengine::wii {
             throw new ArgumentException("Wii material asset path is required.", "materialAssetPath");
         }
 
-        return BuildMaterialFromCooked(materialAssetPath);
+        return BuildMaterialFromCooked(materialAssetPath, nullptr);
     }
 
     /// Builds a Wii runtime model that keeps authored submesh and geometry arrays alive.
@@ -106,7 +106,8 @@ namespace helengine::wii {
     }
 
     /// Builds a Wii runtime model from one serialized cooked model asset path.
-    RuntimeModel* WiiRenderManager3D::BuildModelFromCooked(std::string cookedAssetPath) {
+    RuntimeModel* WiiRenderManager3D::BuildModelFromCooked(std::string cookedAssetPath, IContentStreamSource* contentStreamSource) {
+        (void)contentStreamSource;
         if (cookedAssetPath.empty()) {
             throw new ArgumentException("Wii cooked model path is required.", "cookedAssetPath");
         }
@@ -138,7 +139,8 @@ namespace helengine::wii {
     }
 
     /// Rebuilds one cooked platform-owned material payload path into the shared runtime material contract used by generated scenes.
-    RuntimeMaterial* WiiRenderManager3D::BuildMaterialFromCooked(std::string cookedAssetPath) {
+    RuntimeMaterial* WiiRenderManager3D::BuildMaterialFromCooked(std::string cookedAssetPath, IContentStreamSource* contentStreamSource) {
+        (void)contentStreamSource;
         if (cookedAssetPath.empty()) {
             throw new ArgumentException("Wii cooked material path is required.", "cookedAssetPath");
         }

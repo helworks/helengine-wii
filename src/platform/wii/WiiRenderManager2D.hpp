@@ -46,7 +46,7 @@ namespace helengine::wii {
         RuntimeTexture* BuildTextureFromRaw(TextureAsset* data) override;
 
         /// Rebuilds one platform-owned cooked texture payload into a Wii-native runtime texture.
-        RuntimeTexture* BuildTextureFromCooked(std::string cookedAssetPath) override;
+        RuntimeTexture* BuildTextureFromCooked(std::string cookedAssetPath, IContentStreamSource* contentStreamSource) override;
 
         /// Releases one Wii runtime texture.
         void ReleaseTexture(RuntimeTexture* texture) override;

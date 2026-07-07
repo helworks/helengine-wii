@@ -42,10 +42,10 @@ namespace helengine::wii {
         RuntimeModel* BuildModelFromRaw(ModelAsset* data) override;
 
         /// Builds a Wii runtime model from one serialized cooked model asset path.
-        RuntimeModel* BuildModelFromCooked(std::string cookedAssetPath) override;
+        RuntimeModel* BuildModelFromCooked(std::string cookedAssetPath, IContentStreamSource* contentStreamSource) override;
 
         /// Rebuilds one cooked platform-owned material payload path into the shared runtime material contract used by generated scenes.
-        RuntimeMaterial* BuildMaterialFromCooked(std::string cookedAssetPath);
+        RuntimeMaterial* BuildMaterialFromCooked(std::string cookedAssetPath, IContentStreamSource* contentStreamSource);
 
         /// Rebuilds one cooked platform-owned material payload into the minimal runtime contract currently consumed by generated scenes.
         RuntimeMaterial* BuildMaterialFromCooked(PlatformMaterialAsset* materialAsset);
