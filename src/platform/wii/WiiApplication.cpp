@@ -17,6 +17,7 @@
 #if HELENGINE_WII_HAS_GENERATED_CORE
 #include "Core.hpp"
 #include "CoreInitializationOptions.hpp"
+#include "HostFileSystemContentStreamSource.hpp"
 #include "InputControlId.hpp"
 #include "InputControlKind.hpp"
 #include "InputDeviceKind.hpp"
@@ -419,7 +420,7 @@ namespace helengine::wii {
             const std::string packagedContentRootPath = WiiSceneBootstrap::GetPackagedContentRootPath();
             SYS_Report("[Wii] Runtime content root: %s\n", packagedContentRootPath.c_str());
             AppendRuntimeTrace("[WiiFile] Runtime content root: %s\n", packagedContentRootPath.c_str());
-            options->ContentRootPath = packagedContentRootPath;
+            options->ContentStreamSource = new HostFileSystemContentStreamSource(packagedContentRootPath);
             options->SceneCatalog = WiiSceneBootstrap::CreatePackagedSceneCatalog();
             const std::string packagedStartupSceneId = WiiSceneBootstrap::GetPackagedStartupSceneId();
             SYS_Report("[Wii] Runtime startup scene id: %s\n", packagedStartupSceneId.c_str());
@@ -431,7 +432,7 @@ namespace helengine::wii {
             AppendRuntimeTrace("[WiiFile] Staged content root: %s\n", contentRootPath.c_str());
             SYS_Report("[Wii] Startup scene id: %s\n", startupSceneId.c_str());
             AppendRuntimeTrace("[WiiFile] Startup scene id: %s\n", startupSceneId.c_str());
-            options->ContentRootPath = contentRootPath;
+            options->ContentStreamSource = new HostFileSystemContentStreamSource(contentRootPath);
             options->SceneCatalog = WiiSceneBootstrap::CreateSceneCatalog();
 #endif
             options->UpdateOrderLayers = 4;

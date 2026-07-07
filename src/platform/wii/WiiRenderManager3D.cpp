@@ -66,13 +66,9 @@ namespace helengine::wii {
     }
 
     /// Rebuilds one legacy raw material asset path through the cooked platform-owned Wii material contract.
-    RuntimeMaterial* WiiRenderManager3D::BuildMaterialFromRawAsset(ContentManager* assetContentManager, std::string contentRootPath, std::string materialAssetPath) {
+    RuntimeMaterial* WiiRenderManager3D::BuildMaterialFromRawAsset(ContentManager* assetContentManager, std::string materialAssetPath) {
         if (assetContentManager == nullptr) {
             throw new ArgumentNullException("assetContentManager");
-        }
-
-        if (contentRootPath.empty()) {
-            throw new ArgumentException("Wii content root path is required.", "contentRootPath");
         }
 
         if (materialAssetPath.empty()) {

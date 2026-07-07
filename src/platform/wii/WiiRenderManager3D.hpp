@@ -36,7 +36,7 @@ namespace helengine::wii {
         ~WiiRenderManager3D() override;
 
         /// Rebuilds one legacy raw material asset path through the cooked platform-owned Wii material contract.
-        RuntimeMaterial* BuildMaterialFromRawAsset(ContentManager* assetContentManager, std::string contentRootPath, std::string materialAssetPath) override;
+        RuntimeMaterial* BuildMaterialFromRawAsset(ContentManager* assetContentManager, std::string materialAssetPath) override;
 
         /// Builds a Wii runtime model that keeps authored submesh and geometry arrays alive.
         RuntimeModel* BuildModelFromRaw(ModelAsset* data) override;
