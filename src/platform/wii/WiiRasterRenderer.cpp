@@ -316,7 +316,7 @@ namespace helengine::wii {
     }
 
     /// Configures the GX state used by the current opaque mesh path.
-    void WiiRasterRenderer::ConfigurePipeline(bool useTexturedBranch, bool useIndexedGeometry) {
+    void WiiRasterRenderer::ConfigurePipeline(bool useTexturedBranch, bool useIndexedGeometry, bool transparentMaterial) {
         GX_ClearVtxDesc();
         GX_SetVtxDesc(GX_VA_POS, useIndexedGeometry ? GX_INDEX16 : GX_DIRECT);
         GX_SetVtxDesc(GX_VA_CLR0, GX_DIRECT);
@@ -334,15 +334,15 @@ namespace helengine::wii {
         GX_SetTevOrder(GX_TEVSTAGE0, useTexturedBranch ? GX_TEXCOORD0 : GX_TEXCOORDNULL, useTexturedBranch ? GX_TEXMAP0 : GX_TEXMAP_NULL, GX_COLOR0A0);
         GX_SetTevOp(GX_TEVSTAGE0, useTexturedBranch ? GX_MODULATE : GX_PASSCLR);
         GX_SetAlphaCompare(GX_ALWAYS, 0, GX_AOP_OR, GX_ALWAYS, 0);
-        GX_SetZMode(GX_TRUE, GX_LEQUAL, GX_TRUE);
+        GX_SetZMode(GX_TRUE, GX_LEQUAL, transparentMaterial ? GX_FALSE : GX_TRUE);
         GX_SetZCompLoc(GX_TRUE);
-        GX_SetBlendMode(GX_BM_NONE, GX_BL_ONE, GX_BL_ZERO, GX_LO_CLEAR);
+        GX_SetBlendMode(transparentMaterial ? GX_BM_BLEND : GX_BM_NONE, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_CLEAR);
         GX_SetColorUpdate(GX_TRUE);
         GX_SetAlphaUpdate(GX_FALSE);
     }
 
     /// Configures the GX state used by the indexed lit mesh path with GX fixed-function lighting enabled.
-    void WiiRasterRenderer::ConfigureLitPipeline(bool useTexturedBranch, bool useIndexedGeometry) {
+    void WiiRasterRenderer::ConfigureLitPipeline(bool useTexturedBranch, bool useIndexedGeometry, bool transparentMaterial) {
         GX_ClearVtxDesc();
         GX_SetVtxDesc(GX_VA_POS, useIndexedGeometry ? GX_INDEX16 : GX_DIRECT);
         GX_SetVtxDesc(GX_VA_NRM, useIndexedGeometry ? GX_INDEX16 : GX_DIRECT);
@@ -362,9 +362,9 @@ namespace helengine::wii {
         GX_SetTevOrder(GX_TEVSTAGE0, useTexturedBranch ? GX_TEXCOORD0 : GX_TEXCOORDNULL, useTexturedBranch ? GX_TEXMAP0 : GX_TEXMAP_NULL, GX_COLOR0A0);
         GX_SetTevOp(GX_TEVSTAGE0, useTexturedBranch ? GX_MODULATE : GX_PASSCLR);
         GX_SetAlphaCompare(GX_ALWAYS, 0, GX_AOP_OR, GX_ALWAYS, 0);
-        GX_SetZMode(GX_TRUE, GX_LEQUAL, GX_TRUE);
+        GX_SetZMode(GX_TRUE, GX_LEQUAL, transparentMaterial ? GX_FALSE : GX_TRUE);
         GX_SetZCompLoc(GX_TRUE);
-        GX_SetBlendMode(GX_BM_NONE, GX_BL_ONE, GX_BL_ZERO, GX_LO_CLEAR);
+        GX_SetBlendMode(transparentMaterial ? GX_BM_BLEND : GX_BM_NONE, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_CLEAR);
         GX_SetColorUpdate(GX_TRUE);
         GX_SetAlphaUpdate(GX_FALSE);
     }
@@ -1023,6 +1023,7 @@ namespace helengine::wii {
         }
 
         const bool useLitBranch = UsesLitBranch(submission);
+        const bool transparentMaterial = material->get_RenderState()->get_BlendMode() == MaterialBlendMode::AlphaBlend;
         const MaterialCullMode cullMode = material->get_RenderState()->get_CullMode();
         const u8 gxCullMode = ResolveGxCullMode(cullMode);
         if (!FirstDrawStateReported) {
@@ -1120,10 +1121,10 @@ namespace helengine::wii {
         GX_SetCullMode(gxCullMode);
         if (useLitBranch) {
             LoadNormalMatrix(nativeModelViewMatrix);
-            ConfigureLitPipeline(useTexturedBranch, true);
+            ConfigureLitPipeline(useTexturedBranch, true, transparentMaterial);
             DrawCachedLitSubmesh(framePlan, entity, wiiRuntimeMaterial, cachedMeshData, runtimeSubmesh, useTexturedBranch);
         } else {
-            ConfigurePipeline(useTexturedBranch, true);
+            ConfigurePipeline(useTexturedBranch, true, transparentMaterial);
             BindCachedMeshArrays(cachedMeshData, useTexturedBranch);
             DrawCachedSubmesh(wiiRuntimeMaterial, cachedMeshData, runtimeSubmesh, useTexturedBranch);
         }

@@ -22,6 +22,7 @@
 #include "RenderCommandListBuilder2D.hpp"
 #include "Asset.hpp"
 #include "AssetSerializer.hpp"
+#include "IContentStreamSource.hpp"
 #include "TextureAsset.hpp"
 #include "system/io/file.hpp"
 #include "platform/wii/WiiRuntimeTexture.hpp"
@@ -69,13 +70,14 @@ namespace helengine::wii {
 
     /// Rebuilds one platform-owned cooked texture payload into a Wii-native runtime texture.
     RuntimeTexture* WiiRenderManager2D::BuildTextureFromCooked(std::string cookedAssetPath, IContentStreamSource* contentStreamSource) {
-        (void)contentStreamSource;
         if (cookedAssetPath.empty()) {
             throw new ArgumentException("Wii cooked texture path is required.", "cookedAssetPath");
+        } else if (contentStreamSource == nullptr) {
+            throw new ArgumentNullException("contentStreamSource");
         }
 
         SYS_Report("[Wii] BuildTextureFromCooked open path=%s\n", cookedAssetPath.c_str());
-        FileStream* stream = File::OpenRead(cookedAssetPath.c_str());
+        Stream* stream = contentStreamSource->OpenRead(cookedAssetPath);
         auto streamGuard = he_cpp_make_scope_exit([&]() {
             if (stream != nullptr) {
                 stream->Dispose();
@@ -210,16 +212,6 @@ namespace helengine::wii {
             }
 
             ExecuteCommandList(commandList, logicalFrameWidth, logicalFrameHeight, physicalFrameWidth, physicalFrameHeight);
-        }
-
-        if (HasCapturedDrawables()) {
-            ConfigureSolidColorPipeline(logicalFrameWidth, logicalFrameHeight, physicalFrameWidth, physicalFrameHeight);
-            DrawSolidQuad2D(8.0f, 8.0f, 24.0f, 24.0f, byte4 { 0x00, 0xC0, 0x20, 0xFF });
-        }
-
-        if (DidSubmitGlyph) {
-            ConfigureSolidColorPipeline(logicalFrameWidth, logicalFrameHeight, physicalFrameWidth, physicalFrameHeight);
-            DrawSolidQuad2D(40.0f, 8.0f, 24.0f, 24.0f, byte4 { 0x00, 0x40, 0xFF, 0xFF });
         }
 
         ResetClipRect(physicalFrameWidth, physicalFrameHeight);

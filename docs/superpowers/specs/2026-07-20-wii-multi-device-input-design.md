@@ -7,7 +7,7 @@ Support Wiimote-plus-Nunchuk and GameCube controllers concurrently on Wii. The e
 ## Device Model
 
 - The Wiimote is exposed as its own device with connection state, D-pad, A, B, 1, 2, Plus, and Minus buttons.
-- The attached Nunchuk is represented as the Wiimote extension device and exposes its analog stick as a left-stick input. Its connection state is distinct from the Wiimote’s state.
+- The attached Nunchuk is exposed as a separate engine gamepad slot containing its left-stick axes and connection state. This preserves separation using the existing gamepad-slot contract without inventing a new device-type ABI.
 - GameCube controller ports remain separate engine devices and retain their existing buttons, D-pad, analog sticks, triggers, and connection state.
 - Polling must capture Wiimote/Nunchuk data and GameCube data in the same frame; one device must not suppress the other.
 
@@ -44,4 +44,3 @@ Add focused source and behavior coverage for:
 4. GameCube polling remains active in the same frame.
 5. Device slots remain separate while Demo Disc actions accept either source.
 6. Demo Disc Wii hints use A/B terminology and do not mention 1/2.
-

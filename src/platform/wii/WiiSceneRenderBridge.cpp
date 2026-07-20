@@ -64,10 +64,6 @@ namespace helengine::wii {
         RenderFrameExtractionService extractor;
         RenderFrameExtractionResult* extraction = extractor.Extract(cameras, drawables, lights, capabilities);
         RenderFrame* frame = (*extraction->get_Frames())[0];
-        if (frame->get_HasTransparentDrawables()) {
-            throw new NotSupportedException("Transparent 3D submissions are not supported in the first Wii renderer tier.");
-        }
-
         float4 logicalViewport = CameraViewportResolver::ResolveViewport(camera->get_Viewport(), logicalWidth, logicalHeight);
         float4 physicalViewport = ResolvePhysicalViewport(logicalViewport, logicalWidth, logicalHeight, physicalWidth, physicalHeight);
         float4x4 view = BuildViewMatrix(camera);

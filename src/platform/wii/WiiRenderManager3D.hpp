@@ -136,7 +136,7 @@ namespace helengine::wii {
         std::string ResolvePackagedContentAssetPath(const std::string& cookedMaterialAssetPath, const std::string& contentRelativePath);
 
         /// Loads and attaches one cooked diffuse texture when the path-based Wii cooked-material contract references one.
-        void AttachCookedDiffuseTexture(WiiRuntimeMaterial* runtimeMaterial, PlatformMaterialAsset* materialAsset, const std::string& cookedMaterialAssetPath);
+        void AttachCookedDiffuseTexture(WiiRuntimeMaterial* runtimeMaterial, PlatformMaterialAsset* materialAsset, const std::string& cookedMaterialAssetPath, IContentStreamSource* contentStreamSource);
 
         /// Releases one transient cooked/raw model asset after the shared runtime model has been rebuilt.
         static void ReleaseTransientModelAsset(ModelAsset* asset);

@@ -9,6 +9,7 @@
 #include "AssetSerializer.hpp"
 #include "CameraClearSettings.hpp"
 #include "Core.hpp"
+#include "IContentStreamSource.hpp"
 #include "MaterialBlendMode.hpp"
 #include "MaterialCullMode.hpp"
 #include "MaterialRenderState.hpp"
@@ -107,12 +108,13 @@ namespace helengine::wii {
 
     /// Builds a Wii runtime model from one serialized cooked model asset path.
     RuntimeModel* WiiRenderManager3D::BuildModelFromCooked(std::string cookedAssetPath, IContentStreamSource* contentStreamSource) {
-        (void)contentStreamSource;
         if (cookedAssetPath.empty()) {
             throw new ArgumentException("Wii cooked model path is required.", "cookedAssetPath");
+        } else if (contentStreamSource == nullptr) {
+            throw new ArgumentNullException("contentStreamSource");
         }
 
-        FileStream* stream = File::OpenRead(cookedAssetPath.c_str());
+        Stream* stream = contentStreamSource->OpenRead(cookedAssetPath);
         try {
             Asset* asset = AssetSerializer::Deserialize(stream);
             ModelAsset* cookedModelAsset = he_cpp_try_cast<ModelAsset>(asset);
@@ -140,12 +142,13 @@ namespace helengine::wii {
 
     /// Rebuilds one cooked platform-owned material payload path into the shared runtime material contract used by generated scenes.
     RuntimeMaterial* WiiRenderManager3D::BuildMaterialFromCooked(std::string cookedAssetPath, IContentStreamSource* contentStreamSource) {
-        (void)contentStreamSource;
         if (cookedAssetPath.empty()) {
             throw new ArgumentException("Wii cooked material path is required.", "cookedAssetPath");
+        } else if (contentStreamSource == nullptr) {
+            throw new ArgumentNullException("contentStreamSource");
         }
 
-        FileStream* stream = File::OpenRead(cookedAssetPath.c_str());
+        Stream* stream = contentStreamSource->OpenRead(cookedAssetPath);
         auto streamGuard = he_cpp_make_scope_exit([&]() {
             if (stream != nullptr) {
                 stream->Dispose();
@@ -163,7 +166,7 @@ namespace helengine::wii {
             delete cookedMaterialAsset;
         });
         WiiRuntimeMaterial* runtimeMaterial = static_cast<WiiRuntimeMaterial*>(BuildMaterialFromCooked(cookedMaterialAsset));
-        AttachCookedDiffuseTexture(runtimeMaterial, cookedMaterialAsset, cookedAssetPath);
+        AttachCookedDiffuseTexture(runtimeMaterial, cookedMaterialAsset, cookedAssetPath, contentStreamSource);
         return runtimeMaterial;
     }
 
@@ -439,9 +442,9 @@ namespace helengine::wii {
 
         std::string normalizedMaterialAssetPath = cookedMaterialAssetPath;
         std::replace(normalizedMaterialAssetPath.begin(), normalizedMaterialAssetPath.end(), '\\', '/');
-        const std::size_t cookedMarkerIndex = normalizedMaterialAssetPath.find("/cooked/");
+        const std::size_t cookedMarkerIndex = normalizedMaterialAssetPath.find("cooked/");
         if (cookedMarkerIndex == std::string::npos) {
-            throw new InvalidOperationException("Wii cooked material path must contain the packaged '/cooked/' root segment.");
+            throw new InvalidOperationException("Wii cooked material path must contain the packaged 'cooked/' root segment.");
         }
 
         const std::string contentRootPath = cookedMaterialAssetPath.substr(0, cookedMarkerIndex);
@@ -449,13 +452,15 @@ namespace helengine::wii {
     }
 
     /// Loads and attaches one cooked diffuse texture when the path-based Wii cooked-material contract references one.
-    void WiiRenderManager3D::AttachCookedDiffuseTexture(WiiRuntimeMaterial* runtimeMaterial, PlatformMaterialAsset* materialAsset, const std::string& cookedMaterialAssetPath) {
+    void WiiRenderManager3D::AttachCookedDiffuseTexture(WiiRuntimeMaterial* runtimeMaterial, PlatformMaterialAsset* materialAsset, const std::string& cookedMaterialAssetPath, IContentStreamSource* contentStreamSource) {
         if (runtimeMaterial == nullptr) {
             throw new ArgumentNullException("runtimeMaterial");
         } else if (materialAsset == nullptr) {
             throw new ArgumentNullException("materialAsset");
         } else if (cookedMaterialAssetPath.empty()) {
             throw new ArgumentException("Wii cooked material path is required.", "cookedMaterialAssetPath");
+        } else if (contentStreamSource == nullptr) {
+            throw new ArgumentNullException("contentStreamSource");
         }
 
         if (materialAsset->TextureRelativePath.empty()) {
@@ -463,7 +468,7 @@ namespace helengine::wii {
         }
 
         const std::string cookedTextureAssetPath = ResolvePackagedContentAssetPath(cookedMaterialAssetPath, materialAsset->TextureRelativePath);
-        FileStream* textureStream = File::OpenRead(cookedTextureAssetPath.c_str());
+        Stream* textureStream = contentStreamSource->OpenRead(cookedTextureAssetPath);
         try {
             Asset* textureAssetPayload = AssetSerializer::Deserialize(textureStream);
             TextureAsset* textureAsset = he_cpp_try_cast<TextureAsset>(textureAssetPayload);

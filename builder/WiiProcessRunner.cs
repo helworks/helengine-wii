@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using helengine.baseplatform.Builders;
 
 namespace helengine.wii.builder;
 
@@ -17,12 +18,7 @@ public sealed class WiiProcessRunner : IWiiProcessRunner {
             throw new ArgumentNullException(nameof(startInfo));
         }
 
-        startInfo.RedirectStandardOutput = true;
-        startInfo.RedirectStandardError = true;
-
-        using Process process = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not start external Wii builder process.");
-        process.WaitForExit();
-        cancellationToken.ThrowIfCancellationRequested();
-        return new WiiProcessRunResult(process.ExitCode, process.StandardOutput.ReadToEnd(), process.StandardError.ReadToEnd());
+        NativeProcessRunResult result = new NativeProcessRunner().Run(startInfo, cancellationToken);
+        return new WiiProcessRunResult(result.ExitCode, result.StandardOutput, result.StandardError);
     }
 }

@@ -7,6 +7,7 @@
 #include "platform/wii/WiiBootPhase.hpp"
 
 class Core;
+class IAudioBackend;
 class PlatformInfo;
 
 namespace helengine::wii {
@@ -111,6 +112,9 @@ namespace helengine::wii {
 
         /// Stores the generated input manager bridge.
         WiiInputManager* EngineInputManager;
+
+        /// Stores the generated audio backend bridge.
+        IAudioBackend* EngineAudioBackend;
 
         /// Stores the platform descriptor passed into the generated core initialization contract.
         PlatformInfo* EnginePlatformInfo;

@@ -73,6 +73,7 @@ $(error HELENGINE_CORE_CPP_ROOT helcpp_config.hpp must define HE_CPP_PLATFORM_IS
 endif
 GENERATED_BRIDGE_SOURCES := \
 	$(SOURCE_DIR)/platform/wii/WiiInputManager.cpp \
+	$(SOURCE_DIR)/platform/wii/audio/WiiAudioBackend.cpp \
 	$(SOURCE_DIR)/platform/wii/WiiMeshCache.cpp \
 	$(SOURCE_DIR)/platform/wii/WiiRasterRenderer.cpp \
 	$(SOURCE_DIR)/platform/wii/WiiRenderManager2D.cpp \
@@ -109,6 +110,7 @@ CXXFLAGS := \
 	-O2 \
 	-Wall \
 	-Wextra \
+	-fpermissive \
 	$(MACHDEP) \
 	-ffunction-sections \
 	-fdata-sections
@@ -143,6 +145,7 @@ APPLOADER_LDFLAGS := \
 	--gc-sections
 
 LDLIBS := \
+	-lasnd \
 	-lwiiuse \
 	-lbte \
 	-lfat \

@@ -33,6 +33,7 @@
 #include "StandardPlatformActionBinding.hpp"
 #include "StandardPlatformInputConfiguration.hpp"
 #include "platform/wii/WiiInputManager.hpp"
+#include "platform/wii/audio/WiiAudioBackend.hpp"
 #include "platform/wii/WiiRenderManager2D.hpp"
 #include "platform/wii/WiiRenderManager3D.hpp"
 #include "platform/wii/WiiSceneBootstrap.hpp"
@@ -259,6 +260,7 @@ namespace helengine::wii {
         , EngineRenderManager3D(nullptr)
         , EngineRenderManager2D(nullptr)
         , EngineInputManager(nullptr)
+        , EngineAudioBackend(nullptr)
         , EnginePlatformInfo(nullptr)
 #endif
     {
@@ -267,6 +269,7 @@ namespace helengine::wii {
     /// Releases generated-core bridge objects after the application loop finishes.
     WiiApplication::~WiiApplication() {
 #if HELENGINE_WII_HAS_GENERATED_CORE
+        delete EngineAudioBackend;
         delete EngineInputManager;
         delete EngineRenderManager2D;
         delete EngineRenderManager3D;
@@ -442,7 +445,9 @@ namespace helengine::wii {
             options->RenderList3DInitialCapacity = 64;
             options->StandardPlatformInputConfiguration = new StandardPlatformInputConfiguration(new List<StandardPlatformActionBinding*>({
                 new StandardPlatformActionBinding(StandardPlatformAction::Accept, InputControlId(InputDeviceKind::Gamepad, InputControlKind::Button, 0, static_cast<int32_t>(InputGamepadButton::South))),
-                new StandardPlatformActionBinding(StandardPlatformAction::Return, InputControlId(InputDeviceKind::Gamepad, InputControlKind::Button, 0, static_cast<int32_t>(InputGamepadButton::East)))
+                new StandardPlatformActionBinding(StandardPlatformAction::Accept, InputControlId(InputDeviceKind::Gamepad, InputControlKind::Button, 2, static_cast<int32_t>(InputGamepadButton::South))),
+                new StandardPlatformActionBinding(StandardPlatformAction::Return, InputControlId(InputDeviceKind::Gamepad, InputControlKind::Button, 0, static_cast<int32_t>(InputGamepadButton::East))),
+                new StandardPlatformActionBinding(StandardPlatformAction::Return, InputControlId(InputDeviceKind::Gamepad, InputControlKind::Button, 2, static_cast<int32_t>(InputGamepadButton::East)))
             }));
 
             initializationStage = "ConstructBridgeServices";
@@ -451,6 +456,7 @@ namespace helengine::wii {
             EngineRenderManager2D = new WiiRenderManager2D();
             EngineRenderManager3D->SetOverlayRenderManager2D(EngineRenderManager2D);
             EngineInputManager = new WiiInputManager();
+            EngineAudioBackend = new WiiAudioBackend();
             EnginePlatformInfo = new PlatformInfo("wii", "1.0");
 
             initializationStage = "AddPrimaryWindow";
@@ -462,6 +468,7 @@ namespace helengine::wii {
 
             initializationStage = "InitializeCore";
             EngineCore->Initialize(EngineRenderManager3D, EngineRenderManager2D, EngineInputManager, EnginePlatformInfo, options);
+            EngineCore->SetAudioBackend(EngineAudioBackend);
             SYS_Report("[Wii] Engine core initialized.\n");
             AppendRuntimeTrace("[WiiFile] Engine core initialized.\n");
 #if HELENGINE_WII_HAS_GENERATED_RUNTIME_MODULE_REGISTRATION
@@ -562,7 +569,7 @@ namespace helengine::wii {
                 SYS_Report("[Wii] Engine update begin frame=%lu\n", static_cast<unsigned long>(UpdateFrameLogCount));
             }
             EngineRenderManager2D->BeginFrame();
-            EngineCore->Update();
+            EngineCore->Update(1.0 / 60.0);
             if (UpdateFrameLogCount < 8U && EngineCore->get_SceneManager() != nullptr) {
                 SYS_Report(
                     "[Wii] SceneManager trace stage=%s scene=%s loaded=%ld pending=%ld\n",
@@ -717,7 +724,6 @@ namespace helengine::wii {
         GX_SetAlphaUpdate(GX_TRUE);
         GX_CopyDisp(FrameBuffers[FrameBufferIndex], GX_TRUE);
         GX_DrawDone();
-        GX_Flush();
         VIDEO_SetNextFramebuffer(FrameBuffers[FrameBufferIndex]);
         VIDEO_Flush();
         VIDEO_WaitVSync();

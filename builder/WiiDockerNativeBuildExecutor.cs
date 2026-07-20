@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using helengine.baseplatform.Builders;
 
 namespace helengine.wii.builder;
 
@@ -18,26 +19,15 @@ public sealed class WiiDockerNativeBuildExecutor : IWiiNativeBuildExecutor {
 
         ProcessStartInfo startInfo = CreateStartInfo(paths);
 
-        using Process process = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not start the Wii Docker build process.");
-        Task<string> standardOutputTask = process.StandardOutput.ReadToEndAsync();
-        Task<string> standardErrorTask = process.StandardError.ReadToEndAsync();
-        while (!process.HasExited) {
-            cancellationToken.ThrowIfCancellationRequested();
-            process.WaitForExit(100);
-        }
-
-        process.WaitForExit();
-        Task.WaitAll(standardOutputTask, standardErrorTask);
-
-        if (process.ExitCode != 0) {
-            string standardOutput = standardOutputTask.Result;
-            string standardError = standardErrorTask.Result;
+        NativeProcessRunResult result = new NativeProcessRunner().Run(startInfo, cancellationToken);
+        WriteNativeBuildLog(paths, result);
+        if (result.ExitCode != 0) {
             throw new InvalidOperationException(
                 "Wii native packaged-disc build failed."
                 + Environment.NewLine
-                + standardOutput
+                + result.StandardOutput
                 + Environment.NewLine
-                + standardError);
+                + result.StandardError);
         }
 
         string builtDolPath = Path.Combine(paths.RepositoryRootPath, "build", "helengine_wii.dol");
@@ -93,8 +83,32 @@ public sealed class WiiDockerNativeBuildExecutor : IWiiNativeBuildExecutor {
         startInfo.ArgumentList.Add("helengine-wii");
         startInfo.ArgumentList.Add("sh");
         startInfo.ArgumentList.Add("-lc");
-        startInfo.ArgumentList.Add("make clean; make");
+        startInfo.ArgumentList.Add("set -e; make clean && make");
         return startInfo;
+    }
+
+    /// <summary>
+    /// Persists the complete native build output next to the packaged Wii output for post-build diagnosis.
+    /// </summary>
+    /// <param name="paths">Workspace paths that identify the active output directory.</param>
+    /// <param name="result">Completed native process result containing both output streams.</param>
+    static void WriteNativeBuildLog(WiiBuilderPaths paths, NativeProcessRunResult result) {
+        if (paths == null) {
+            throw new ArgumentNullException(nameof(paths));
+        } else if (result == null) {
+            throw new ArgumentNullException(nameof(result));
+        }
+
+        string outputDirectoryPath = Path.GetDirectoryName(paths.DiscImagePath)
+            ?? throw new InvalidOperationException("Wii packaged output directory could not be resolved.");
+        Directory.CreateDirectory(outputDirectoryPath);
+        string logPath = Path.Combine(outputDirectoryPath, "wii-native-build.log");
+        string contents = "exit-code=" + result.ExitCode + Environment.NewLine
+            + "[stdout]" + Environment.NewLine
+            + result.StandardOutput
+            + "[stderr]" + Environment.NewLine
+            + result.StandardError;
+        File.WriteAllText(logPath, contents);
     }
 
     /// <summary>

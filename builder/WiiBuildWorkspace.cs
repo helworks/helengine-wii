@@ -75,10 +75,10 @@ public static class WiiBuildWorkspace {
         }
 
         WriteRuntimeSceneManifest(paths, request.Manifest);
-        new WiiRuntimeGeneratedModuleStager().PrepareGeneratedCoreRuntimeSupport(paths.GeneratedCoreRootPath);
         WritePhaseMarker(phaseMarkerPath, "runtime scene manifest written");
         progressReporter.Report(new PlatformBuildProgressUpdate("Generate Runtime Manifest", "runtime-scene-manifest", 1, 4, "Generated Wii packaged runtime scene manifest."));
 
+        WritePhaseMarker(phaseMarkerPath, "native build begin");
         nativeBuildExecutor.Build(paths, cancellationToken);
         WritePhaseMarker(phaseMarkerPath, "native build completed");
         progressReporter.Report(new PlatformBuildProgressUpdate("Build Native Executable", "helengine_wii.dol", 2, 4, "Built packaged-mode Wii native executable."));

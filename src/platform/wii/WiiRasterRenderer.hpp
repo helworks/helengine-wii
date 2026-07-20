@@ -39,10 +39,10 @@ namespace helengine::wii {
         WiiMeshCache* MeshCache;
 
         /// Configures the GX state used by the current opaque mesh path.
-        void ConfigurePipeline(bool useTexturedBranch, bool useIndexedGeometry);
+        void ConfigurePipeline(bool useTexturedBranch, bool useIndexedGeometry, bool transparentMaterial);
 
         /// Configures the GX state used by the indexed lit mesh path with GX fixed-function lighting enabled.
-        void ConfigureLitPipeline(bool useTexturedBranch, bool useIndexedGeometry);
+        void ConfigureLitPipeline(bool useTexturedBranch, bool useIndexedGeometry, bool transparentMaterial);
 
         /// Binds the cached mesh arrays used by the indexed Wii draw path.
         void BindCachedMeshArrays(WiiCachedMeshData* cachedMeshData, bool useTexturedBranch);

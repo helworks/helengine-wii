@@ -103,6 +103,35 @@ public sealed class WiiRuntimeSourceTests {
     }
 
     /// <summary>
+    /// Ensures the Wii runtime links the ASND mixer backend and wires the shared engine audio seam before startup-scene loading.
+    /// </summary>
+    [Fact]
+    public void PackagedAudio_ConstructsWiiAudioBackendAndSetsSharedAudioBackend() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string makefileSource = File.ReadAllText(Path.Combine(repositoryRootPath, "Makefile"));
+        string applicationHeaderSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiApplication.hpp"));
+        string applicationSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiApplication.cpp"));
+        string audioBackendHeaderSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "audio", "WiiAudioBackend.hpp"));
+        string audioBackendSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "audio", "WiiAudioBackend.cpp"));
+
+        Assert.Contains("$(SOURCE_DIR)/platform/wii/audio/WiiAudioBackend.cpp", makefileSource, StringComparison.Ordinal);
+        Assert.Contains("-lasnd", makefileSource, StringComparison.Ordinal);
+        Assert.Contains("class IAudioBackend;", applicationHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("IAudioBackend* EngineAudioBackend;", applicationHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("#include \"platform/wii/audio/WiiAudioBackend.hpp\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("EngineAudioBackend = new WiiAudioBackend();", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("EngineCore->SetAudioBackend(EngineAudioBackend);", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("delete EngineAudioBackend;", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("class WiiAudioBackend final : public ::IAudioBackend", audioBackendHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("#include <asndlib.h>", audioBackendSource, StringComparison.Ordinal);
+        Assert.Contains("ASND_Init();", audioBackendSource, StringComparison.Ordinal);
+        Assert.Contains("ASND_SetInfiniteVoice(", audioBackendSource, StringComparison.Ordinal);
+        Assert.Contains("ASND_SetVoice(", audioBackendSource, StringComparison.Ordinal);
+        Assert.Contains("ASND_ChangeVolumeVoice(", audioBackendSource, StringComparison.Ordinal);
+        Assert.Contains("ASND_StopVoice(", audioBackendSource, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Ensures the direct-DOL Wii runtime reports the queued startup scene and the first generated scene/content trace state needed to prove authored scene loading.
     /// </summary>
     [Fact]
@@ -160,8 +189,9 @@ public sealed class WiiRuntimeSourceTests {
         Assert.Contains("[Wii] BuildTextureFromRaw completed.\\n", renderManagerSource, StringComparison.Ordinal);
         Assert.Contains("texture->Dispose();", renderManagerSource, StringComparison.Ordinal);
         Assert.Contains("delete texture;", renderManagerSource, StringComparison.Ordinal);
-        Assert.Contains("RuntimeTexture* WiiRenderManager2D::BuildTextureFromCooked(std::string cookedAssetPath)", renderManagerSource, StringComparison.Ordinal);
-        Assert.Contains("File::OpenRead(cookedAssetPath.c_str())", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("RuntimeTexture* WiiRenderManager2D::BuildTextureFromCooked(std::string cookedAssetPath, IContentStreamSource* contentStreamSource)", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("throw new ArgumentNullException(\"contentStreamSource\");", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("Stream* stream = contentStreamSource->OpenRead(cookedAssetPath);", renderManagerSource, StringComparison.Ordinal);
         Assert.Contains("AssetSerializer::Deserialize(stream)", renderManagerSource, StringComparison.Ordinal);
         Assert.Contains("he_cpp_try_cast<TextureAsset>(asset)", renderManagerSource, StringComparison.Ordinal);
         Assert.Contains("ReleaseTransientTextureAsset(textureAsset);", renderManagerSource, StringComparison.Ordinal);
@@ -239,8 +269,8 @@ public sealed class WiiRuntimeSourceTests {
 
         Assert.Contains("class WiiRenderManager3D : public RenderManager3D {", renderManagerHeaderSource, StringComparison.Ordinal);
         Assert.Contains("RuntimeModel* BuildModelFromRaw(ModelAsset* data) override;", renderManagerHeaderSource, StringComparison.Ordinal);
-        Assert.Contains("RuntimeModel* BuildModelFromCooked(std::string cookedAssetPath) override;", renderManagerHeaderSource, StringComparison.Ordinal);
-        Assert.Contains("RuntimeMaterial* BuildMaterialFromCooked(std::string cookedAssetPath);", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("RuntimeModel* BuildModelFromCooked(std::string cookedAssetPath, IContentStreamSource* contentStreamSource) override;", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("RuntimeMaterial* BuildMaterialFromCooked(std::string cookedAssetPath, IContentStreamSource* contentStreamSource);", renderManagerHeaderSource, StringComparison.Ordinal);
         Assert.Contains("RuntimeMaterial* BuildMaterialFromCooked(PlatformMaterialAsset* materialAsset);", renderManagerHeaderSource, StringComparison.Ordinal);
         Assert.Contains("void SetPresentedFrameSize(uint16_t width, uint16_t height);", renderManagerHeaderSource, StringComparison.Ordinal);
         Assert.Contains("WiiSceneRenderBridge* SceneRenderBridge;", renderManagerHeaderSource, StringComparison.Ordinal);
@@ -271,13 +301,15 @@ public sealed class WiiRuntimeSourceTests {
         Assert.Contains("delete RasterRenderer;", renderManagerSource, StringComparison.Ordinal);
         Assert.Contains("delete MeshCache;", renderManagerSource, StringComparison.Ordinal);
         Assert.Contains("delete SceneRenderBridge;", renderManagerSource, StringComparison.Ordinal);
-        Assert.Contains("File::OpenRead(cookedAssetPath.c_str())", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("throw new ArgumentNullException(\"contentStreamSource\");", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("Stream* stream = contentStreamSource->OpenRead(cookedAssetPath);", renderManagerSource, StringComparison.Ordinal);
         Assert.Contains("AssetSerializer::Deserialize(stream)", renderManagerSource, StringComparison.Ordinal);
         Assert.Contains("he_cpp_try_cast<ModelAsset>(asset)", renderManagerSource, StringComparison.Ordinal);
         Assert.Contains("runtimeModel->OwnedSourceModelAsset = cookedModelAsset;", renderManagerSource, StringComparison.Ordinal);
         Assert.Contains("PlatformMaterialAsset* materialAsset = he_cpp_try_cast<PlatformMaterialAsset>(asset);", renderManagerSource, StringComparison.Ordinal);
-        Assert.Contains("return BuildMaterialFromCooked(materialAsset);", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("AttachCookedDiffuseTexture(runtimeMaterial, cookedMaterialAsset, cookedAssetPath, contentStreamSource);", renderManagerSource, StringComparison.Ordinal);
         Assert.Contains("runtimeMaterial->SetRenderState(BuildMaterialRenderState(materialAsset));", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("Stream* textureStream = contentStreamSource->OpenRead(cookedTextureAssetPath);", renderManagerSource, StringComparison.Ordinal);
         Assert.Contains("renderState->set_CullMode(materialAsset->DoubleSided", renderManagerSource, StringComparison.Ordinal);
         Assert.Contains("renderState->set_BlendMode(materialAsset->BaseColorA < 0xFF", renderManagerSource, StringComparison.Ordinal);
         Assert.Contains("GXColor WiiRenderManager3D::ToGxColor(float4 color)", renderManagerSource, StringComparison.Ordinal);
@@ -497,30 +529,76 @@ public sealed class WiiRuntimeSourceTests {
     }
 
     /// <summary>
-    /// Ensures the Wii input backend polls both Wii Remote and GameCube controller paths and maps sideways Wii Remote buttons into the shared logical gamepad contract.
+    /// Ensures Wii material texture resolution accepts the content-relative cooked paths emitted by packaged scene assets.
     /// </summary>
     [Fact]
-    public void PackagedInput_UsesWiiRemoteSidewaysMappingWithGameCubeFallback() {
+    public void Packaged3D_ResolvesRelativeCookedMaterialPaths() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string renderManagerSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRenderManager3D.cpp"));
+
+        Assert.Contains("normalizedMaterialAssetPath.find(\"cooked/\")", renderManagerSource, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ensures the first Wii renderer tier submits transparent 3D materials through GX blending instead of rejecting the frame.
+    /// </summary>
+    [Fact]
+    public void Packaged3D_SupportsTransparentSubmissions() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string bridgeSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiSceneRenderBridge.cpp"));
+        string rasterRendererHeaderSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRasterRenderer.hpp"));
+        string rasterRendererSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRasterRenderer.cpp"));
+
+        Assert.DoesNotContain("Transparent 3D submissions are not supported", bridgeSource, StringComparison.Ordinal);
+        Assert.Contains("bool transparentMaterial", rasterRendererHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("transparentMaterial ? GX_BM_BLEND", rasterRendererSource, StringComparison.Ordinal);
+        Assert.Contains("GX_BL_SRCALPHA, GX_BL_INVSRCALPHA", rasterRendererSource, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ensures the Wii input backend polls Wiimote and GameCube controller paths and maps their buttons into the shared logical gamepad contract.
+    /// </summary>
+    [Fact]
+    public void PackagedInput_UsesWiimoteAndGameCubeMappings() {
         string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
         string inputHeaderSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiInputManager.hpp"));
         string inputSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiInputManager.cpp"));
 
         Assert.Contains("#include <wiiuse/wpad.h>", inputSource, StringComparison.Ordinal);
         Assert.Contains("WPAD_Init();", inputSource, StringComparison.Ordinal);
-        Assert.Contains("WPAD_SetDataFormat(WPAD_CHAN_0, WPAD_FMT_BTNS);", inputSource, StringComparison.Ordinal);
+        Assert.Contains("WPAD_SetDataFormat(WPAD_CHAN_0, WPAD_FMT_BTNS_ACC_IR);", inputSource, StringComparison.Ordinal);
         Assert.Contains("WPAD_ScanPads();", inputSource, StringComparison.Ordinal);
         Assert.Contains("const u32 wiiButtonsHeld = WPAD_ButtonsHeld(WPAD_CHAN_0);", inputSource, StringComparison.Ordinal);
-        Assert.Contains("gamepadState.SetButtonDown(InputGamepadButton::DPadUp, (wiiButtonsHeld & WPAD_BUTTON_UP) != 0);", inputSource, StringComparison.Ordinal);
-        Assert.Contains("gamepadState.SetButtonDown(InputGamepadButton::DPadDown, (wiiButtonsHeld & WPAD_BUTTON_DOWN) != 0);", inputSource, StringComparison.Ordinal);
-        Assert.Contains("gamepadState.SetButtonDown(InputGamepadButton::DPadLeft, (wiiButtonsHeld & WPAD_BUTTON_LEFT) != 0);", inputSource, StringComparison.Ordinal);
-        Assert.Contains("gamepadState.SetButtonDown(InputGamepadButton::DPadRight, (wiiButtonsHeld & WPAD_BUTTON_RIGHT) != 0);", inputSource, StringComparison.Ordinal);
-        Assert.Contains("gamepadState.SetButtonDown(InputGamepadButton::South, (wiiButtonsHeld & WPAD_BUTTON_2) != 0);", inputSource, StringComparison.Ordinal);
-        Assert.Contains("gamepadState.SetButtonDown(InputGamepadButton::East, (wiiButtonsHeld & WPAD_BUTTON_1) != 0);", inputSource, StringComparison.Ordinal);
-        Assert.Contains("gamepadState.SetButtonDown(InputGamepadButton::Start, (wiiButtonsHeld & WPAD_BUTTON_PLUS) != 0);", inputSource, StringComparison.Ordinal);
-        Assert.Contains("gamepadState.SetButtonDown(InputGamepadButton::Select, (wiiButtonsHeld & WPAD_BUTTON_MINUS) != 0);", inputSource, StringComparison.Ordinal);
-        Assert.Contains("const u16 heldButtons = PAD_ButtonsHeld(0);", inputSource, StringComparison.Ordinal);
+        Assert.Contains("wiimoteState.SetButtonDown(InputGamepadButton::DPadUp, (wiiButtonsHeld & WPAD_BUTTON_UP) != 0);", inputSource, StringComparison.Ordinal);
+        Assert.Contains("wiimoteState.SetButtonDown(InputGamepadButton::DPadDown, (wiiButtonsHeld & WPAD_BUTTON_DOWN) != 0);", inputSource, StringComparison.Ordinal);
+        Assert.Contains("wiimoteState.SetButtonDown(InputGamepadButton::DPadLeft, (wiiButtonsHeld & WPAD_BUTTON_LEFT) != 0);", inputSource, StringComparison.Ordinal);
+        Assert.Contains("wiimoteState.SetButtonDown(InputGamepadButton::DPadRight, (wiiButtonsHeld & WPAD_BUTTON_RIGHT) != 0);", inputSource, StringComparison.Ordinal);
+        Assert.Contains("wiimoteState.SetButtonDown(InputGamepadButton::South, (wiiButtonsHeld & WPAD_BUTTON_A) != 0);", inputSource, StringComparison.Ordinal);
+        Assert.Contains("wiimoteState.SetButtonDown(InputGamepadButton::East, (wiiButtonsHeld & WPAD_BUTTON_B) != 0);", inputSource, StringComparison.Ordinal);
+        Assert.Contains("wiimoteState.SetButtonDown(InputGamepadButton::Start, (wiiButtonsHeld & WPAD_BUTTON_PLUS) != 0);", inputSource, StringComparison.Ordinal);
+        Assert.Contains("wiimoteState.SetButtonDown(InputGamepadButton::Select, (wiiButtonsHeld & WPAD_BUTTON_MINUS) != 0);", inputSource, StringComparison.Ordinal);
+        Assert.Contains("const u16 heldButtons = PAD_ButtonsHeld(controllerIndex);", inputSource, StringComparison.Ordinal);
         Assert.Contains("PAD_ScanPads();", inputSource, StringComparison.Ordinal);
+        Assert.Contains("gameCubeState.set_LeftStickY(static_cast<int16_t>(-PAD_StickY(controllerIndex) * 256));", inputSource, StringComparison.Ordinal);
         Assert.Contains("InputFrameState CaptureFrame() override;", inputHeaderSource, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ensures Wii input capture preserves Wiimote, Nunchuk, and all GameCube controller sources as separate engine gamepad slots.
+    /// </summary>
+    [Fact]
+    public void PackagedInput_CapturesSeparateWiimoteNunchukAndGameCubeDevices() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string inputSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiInputManager.cpp"));
+
+        Assert.Contains("WPAD_SetDataFormat(WPAD_CHAN_0, WPAD_FMT_BTNS_ACC_IR);", inputSource, StringComparison.Ordinal);
+        Assert.Contains("WPAD_Data(WPAD_CHAN_0)", inputSource, StringComparison.Ordinal);
+        Assert.Contains("WPAD_EXP_NUNCHUK", inputSource, StringComparison.Ordinal);
+        Assert.Contains("WPAD_BUTTON_A", inputSource, StringComparison.Ordinal);
+        Assert.Contains("WPAD_BUTTON_B", inputSource, StringComparison.Ordinal);
+        Assert.Contains("for (int controllerIndex = 0; controllerIndex < 4; controllerIndex++)", inputSource, StringComparison.Ordinal);
+        Assert.Contains("frame.set_GamepadCount(6);", inputSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("if (hasWiiInput) {", inputSource, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -539,7 +617,9 @@ public sealed class WiiRuntimeSourceTests {
         Assert.Contains("#include \"InputControlKind.hpp\"", applicationSource, StringComparison.Ordinal);
         Assert.Contains("options->StandardPlatformInputConfiguration = new StandardPlatformInputConfiguration(", applicationSource, StringComparison.Ordinal);
         Assert.Contains("new StandardPlatformActionBinding(StandardPlatformAction::Accept, InputControlId(InputDeviceKind::Gamepad, InputControlKind::Button, 0, static_cast<int32_t>(InputGamepadButton::South)))", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("new StandardPlatformActionBinding(StandardPlatformAction::Accept, InputControlId(InputDeviceKind::Gamepad, InputControlKind::Button, 2, static_cast<int32_t>(InputGamepadButton::South)))", applicationSource, StringComparison.Ordinal);
         Assert.Contains("new StandardPlatformActionBinding(StandardPlatformAction::Return, InputControlId(InputDeviceKind::Gamepad, InputControlKind::Button, 0, static_cast<int32_t>(InputGamepadButton::East)))", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("new StandardPlatformActionBinding(StandardPlatformAction::Return, InputControlId(InputDeviceKind::Gamepad, InputControlKind::Button, 2, static_cast<int32_t>(InputGamepadButton::East)))", applicationSource, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -636,10 +716,10 @@ public sealed class WiiRuntimeSourceTests {
     }
 
     /// <summary>
-    /// Ensures the packaged-disc Wii runtime exposes temporary host-visible diagnostics for the menu text path while debugging.
+    /// Ensures the packaged-disc Wii runtime does not render temporary host-visible diagnostics over the game view.
     /// </summary>
     [Fact]
-    public void PackagedGpuText_ExposesHostVisibleDiagnosticsForMenuTextPath() {
+    public void PackagedGpuText_DoesNotRenderHostVisibleDiagnosticsOverMenuTextPath() {
         string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
         string applicationSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiApplication.cpp"));
         string renderManagerHeaderSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRenderManager2D.hpp"));
@@ -652,10 +732,11 @@ public sealed class WiiRuntimeSourceTests {
         Assert.Contains("get_VisitedDrawableCount()", renderManagerHeaderSource, StringComparison.Ordinal);
         Assert.Contains("get_QueuedTextCount()", renderManagerHeaderSource, StringComparison.Ordinal);
         Assert.Contains("get_DidSubmitGlyph()", renderManagerHeaderSource, StringComparison.Ordinal);
-        Assert.Contains("DrawSolidQuad2D(8.0f, 8.0f, 24.0f, 24.0f,", renderManagerSource, StringComparison.Ordinal);
-        Assert.Contains("DrawSolidQuad2D(40.0f, 8.0f, 24.0f, 24.0f,", renderManagerSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("DrawSolidQuad2D(8.0f, 8.0f, 24.0f, 24.0f,", renderManagerSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("DrawSolidQuad2D(40.0f, 8.0f, 24.0f, 24.0f,", renderManagerSource, StringComparison.Ordinal);
         Assert.DoesNotContain("DrawSolidQuad2D(0.0f, 0.0f, static_cast<float>(frameWidth), 40.0f,", renderManagerSource, StringComparison.Ordinal);
         Assert.DoesNotContain("DrawSolidQuad2D(0.0f, static_cast<float>(frameHeight) - 32.0f, static_cast<float>(frameWidth), 32.0f,", renderManagerSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("GX_Flush();", applicationSource, StringComparison.Ordinal);
         Assert.Contains("DidSubmitGlyph = true;", renderManagerSource, StringComparison.Ordinal);
     }
 
@@ -733,6 +814,18 @@ public sealed class WiiRuntimeSourceTests {
         Assert.Contains("GX_SetColorUpdate(GX_TRUE);", applicationSource, StringComparison.Ordinal);
         Assert.Contains("GX_SetAlphaUpdate(GX_TRUE);", applicationSource, StringComparison.Ordinal);
         Assert.Contains("GX_CopyDisp(FrameBuffers[FrameBufferIndex], GX_TRUE);", applicationSource, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ensures the Wii runtime advances the shared engine at the console refresh cadence instead of applying a missed-refresh wall-clock jump to animations.
+    /// </summary>
+    [Fact]
+    public void PackagedDiscBootSource_UsesFixedRefreshUpdateStep() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string applicationSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiApplication.cpp"));
+
+        Assert.Contains("EngineCore->Update(1.0 / 60.0);", applicationSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("EngineCore->Update();", applicationSource, StringComparison.Ordinal);
     }
 
     /// <summary>
