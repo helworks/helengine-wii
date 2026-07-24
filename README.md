@@ -5,11 +5,16 @@ This repository contains the Wii platform host and builder integration for Helen
 ## Build
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File ..\helengine\artifacts\build-platform.ps1 `
+dotnet run --project ..\helengine\tools\build-waiter\helengine.buildwaiter.csproj -- `
+  --output ..\helprojs\city\wii-build `
+  --require game.iso `
+  -- powershell -NoProfile -ExecutionPolicy Bypass -File ..\helengine\scripts\build-platform.ps1 `
   -Project ..\helprojs\city\project.heproj `
   -Platform wii `
   -Output ..\helprojs\city\wii-build
 ```
+
+The Build Waiter returns successfully only after `game.iso` is fresh and non-empty.
 
 ## Run In Emulator
 
