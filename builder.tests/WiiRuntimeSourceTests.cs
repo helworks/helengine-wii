@@ -1002,6 +1002,50 @@ public sealed class WiiRuntimeSourceTests {
     }
 
     /// <summary>
+    /// Ensures draw-failure diagnostics retain scene-materialization progress and component identity while the generated core owns a scene-load transition.
+    /// </summary>
+    [Fact]
+    public void DrawFailureDiagnostic_MapsRuntimeSceneLoadTraceStages() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string failureCodeSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiFailureCode.hpp"));
+        string applicationHeaderSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiApplication.hpp"));
+        string applicationSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiApplication.cpp"));
+
+        Assert.Contains("SceneMaterializationBegin = 0xC120U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("SceneEntityConstruction = 0xC121U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("SceneComponentDeserialization = 0xC122U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("SceneChildEntity = 0xC123U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("SceneEntityCompletion = 0xC124U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("SceneMaterializationCompleted = 0xC125U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("CameraComponentDeserialization = 0xC130U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("RoundedRectComponentDeserialization = 0xC131U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("ViewportComponentDeserialization = 0xC132U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("ReferenceCanvasFitComponentDeserialization = 0xC133U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("SplashComponentDeserialization = 0xC134U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("SpriteComponentDeserialization = 0xC135U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("bool RefineSceneLoadFailureCheckpoint(const std::string& sceneLoadStage, const std::string& componentTypeId);", applicationHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("WiiFailureCode ResolveSceneComponentFailureCode(const std::string& componentTypeId) const;", applicationHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("sceneTransitionStage.starts_with(\"SceneLoad:\")", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("get_LastTraceComponentTypeId()", applicationSource, StringComparison.Ordinal);
+
+        Assert.Contains("\"LoadBegin\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("\"BeforeRootEntityLoad\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("\"LoadEntityBegin\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("\"BeforeComponentLoad\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("\"LoadComponentBegin\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("\"BeforeChildEntityLoad\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("\"LoadEntityEnd\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("\"LoadEnd\"", applicationSource, StringComparison.Ordinal);
+
+        Assert.Contains("\"helengine.CameraComponent\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("\"helengine.RoundedRectComponent\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("\"helengine.ViewportComponent\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("\"helengine.ReferenceCanvasFitComponent\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("\"city.menu.HelenOfCodeSplashComponent\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("\"helengine.SpriteComponent\"", applicationSource, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Ensures generated draw boundaries after scene commit refine failures without replacing more precise native renderer stages.
     /// </summary>
     [Fact]

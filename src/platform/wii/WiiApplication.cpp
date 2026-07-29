@@ -866,6 +866,15 @@ namespace helengine::wii {
             return;
         }
 
+        if (sceneTransitionStage.starts_with("SceneLoad:")
+            && EngineCore != nullptr
+            && EngineCore->get_SceneLoadService() != nullptr
+            && RefineSceneLoadFailureCheckpoint(
+                EngineCore->get_SceneLoadService()->get_LastTraceStage(),
+                EngineCore->get_SceneLoadService()->get_LastTraceComponentTypeId())) {
+            return;
+        }
+
         if (sceneTransitionStage.starts_with("SceneManager:")
             && EngineCore != nullptr
             && EngineCore->get_SceneManager() != nullptr
@@ -891,6 +900,46 @@ namespace helengine::wii {
             SetFailureCheckpoint(WiiFailureCode::DebugRenderFrame);
         }
 #endif
+    }
+
+    /// Resolves a component type identifier to its most specific scene-deserialization diagnostic code.
+    WiiFailureCode WiiApplication::ResolveSceneComponentFailureCode(const std::string& componentTypeId) const {
+        if (componentTypeId == "helengine.CameraComponent") {
+            return WiiFailureCode::CameraComponentDeserialization;
+        } else if (componentTypeId == "helengine.RoundedRectComponent") {
+            return WiiFailureCode::RoundedRectComponentDeserialization;
+        } else if (componentTypeId == "helengine.ViewportComponent") {
+            return WiiFailureCode::ViewportComponentDeserialization;
+        } else if (componentTypeId == "helengine.ReferenceCanvasFitComponent") {
+            return WiiFailureCode::ReferenceCanvasFitComponentDeserialization;
+        } else if (componentTypeId == "city.menu.HelenOfCodeSplashComponent") {
+            return WiiFailureCode::SplashComponentDeserialization;
+        } else if (componentTypeId == "helengine.SpriteComponent") {
+            return WiiFailureCode::SpriteComponentDeserialization;
+        }
+
+        return WiiFailureCode::SceneComponentDeserialization;
+    }
+
+    /// Maps a scene-materialization trace stage and component type to its corresponding visible draw-failure diagnostic code.
+    bool WiiApplication::RefineSceneLoadFailureCheckpoint(const std::string& sceneLoadStage, const std::string& componentTypeId) {
+        if (sceneLoadStage == "LoadBegin" || sceneLoadStage == "BeforeRootEntityLoad") {
+            SetFailureCheckpoint(WiiFailureCode::SceneMaterializationBegin);
+        } else if (sceneLoadStage == "LoadEntityBegin") {
+            SetFailureCheckpoint(WiiFailureCode::SceneEntityConstruction);
+        } else if (sceneLoadStage == "BeforeComponentLoad" || sceneLoadStage == "LoadComponentBegin") {
+            SetFailureCheckpoint(ResolveSceneComponentFailureCode(componentTypeId));
+        } else if (sceneLoadStage == "BeforeChildEntityLoad") {
+            SetFailureCheckpoint(WiiFailureCode::SceneChildEntity);
+        } else if (sceneLoadStage == "LoadEntityEnd") {
+            SetFailureCheckpoint(WiiFailureCode::SceneEntityCompletion);
+        } else if (sceneLoadStage == "LoadEnd") {
+            SetFailureCheckpoint(WiiFailureCode::SceneMaterializationCompleted);
+        } else {
+            return false;
+        }
+
+        return true;
     }
 
     /// Maps a scene-manager trace stage to its corresponding visible draw-failure diagnostic code.

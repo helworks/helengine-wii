@@ -75,6 +75,12 @@ namespace helengine::wii {
         /// Refines a caught generated draw failure using the last scene or Wii-native rendering boundary entered.
         void RefineDrawFailureCheckpoint();
 
+        /// Resolves a component type identifier to its most specific scene-deserialization diagnostic code.
+        WiiFailureCode ResolveSceneComponentFailureCode(const std::string& componentTypeId) const;
+
+        /// Maps a scene-materialization trace stage and component type to its corresponding visible draw-failure diagnostic code.
+        bool RefineSceneLoadFailureCheckpoint(const std::string& sceneLoadStage, const std::string& componentTypeId);
+
         /// Maps a scene-manager trace stage to its corresponding visible draw-failure diagnostic code.
         bool RefineSceneManagerFailureCheckpoint(const std::string& sceneManagerStage);
 

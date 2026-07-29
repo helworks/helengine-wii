@@ -110,6 +110,42 @@ namespace helengine::wii {
         /// Generated scene loading was releasing transition assets or completing cleanup.
         SceneLoadCleanup = 0xC11DU,
 
+        /// The scene materialization service was beginning to reconstruct the authored scene graph.
+        SceneMaterializationBegin = 0xC120U,
+
+        /// The scene materialization service was constructing an authored entity.
+        SceneEntityConstruction = 0xC121U,
+
+        /// The scene materialization service was deserializing an authored component with no more specific component mapping.
+        SceneComponentDeserialization = 0xC122U,
+
+        /// The scene materialization service was about to materialize an authored child entity.
+        SceneChildEntity = 0xC123U,
+
+        /// The scene materialization service was completing an authored entity and attaching it to its parent scene graph.
+        SceneEntityCompletion = 0xC124U,
+
+        /// The scene materialization service had completed reconstruction of the authored scene graph.
+        SceneMaterializationCompleted = 0xC125U,
+
+        /// The scene materialization service was deserializing a camera component.
+        CameraComponentDeserialization = 0xC130U,
+
+        /// The scene materialization service was deserializing a rounded-rectangle component.
+        RoundedRectComponentDeserialization = 0xC131U,
+
+        /// The scene materialization service was deserializing a viewport component.
+        ViewportComponentDeserialization = 0xC132U,
+
+        /// The scene materialization service was deserializing a reference-canvas-fit component.
+        ReferenceCanvasFitComponentDeserialization = 0xC133U,
+
+        /// The scene materialization service was deserializing the Helen of Code splash component.
+        SplashComponentDeserialization = 0xC134U,
+
+        /// The scene materialization service was deserializing a sprite component.
+        SpriteComponentDeserialization = 0xC135U,
+
         /// The scene manager was registering textures owned by a newly loaded scene.
         OwnedTextureRegistration = 0xC140U,
 
