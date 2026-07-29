@@ -912,7 +912,7 @@ namespace helengine::wii {
             return WiiFailureCode::ViewportComponentDeserialization;
         } else if (componentTypeId == "helengine.ReferenceCanvasFitComponent") {
             return WiiFailureCode::ReferenceCanvasFitComponentDeserialization;
-        } else if (componentTypeId == "city.menu.HelenOfCodeSplashComponent") {
+        } else if (componentTypeId == "city.menu.HelenOfCodeSplashComponent, gameplay") {
             return WiiFailureCode::SplashComponentDeserialization;
         } else if (componentTypeId == "helengine.SpriteComponent") {
             return WiiFailureCode::SpriteComponentDeserialization;

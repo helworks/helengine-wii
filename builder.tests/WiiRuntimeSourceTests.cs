@@ -1041,7 +1041,7 @@ public sealed class WiiRuntimeSourceTests {
         Assert.Contains("\"helengine.RoundedRectComponent\"", applicationSource, StringComparison.Ordinal);
         Assert.Contains("\"helengine.ViewportComponent\"", applicationSource, StringComparison.Ordinal);
         Assert.Contains("\"helengine.ReferenceCanvasFitComponent\"", applicationSource, StringComparison.Ordinal);
-        Assert.Contains("\"city.menu.HelenOfCodeSplashComponent\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("\"city.menu.HelenOfCodeSplashComponent, gameplay\"", applicationSource, StringComparison.Ordinal);
         Assert.Contains("\"helengine.SpriteComponent\"", applicationSource, StringComparison.Ordinal);
     }
 
