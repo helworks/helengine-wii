@@ -1002,7 +1002,7 @@ public sealed class WiiRuntimeSourceTests {
     }
 
     /// <summary>
-    /// Ensures draw-failure diagnostics retain scene-materialization progress and component identity while the generated core owns a scene-load transition.
+    /// Ensures draw-failure diagnostics retain the exact scene-materialization and component mappings while the generated core owns a scene-load transition.
     /// </summary>
     [Fact]
     public void DrawFailureDiagnostic_MapsRuntimeSceneLoadTraceStages() {
@@ -1010,6 +1010,7 @@ public sealed class WiiRuntimeSourceTests {
         string failureCodeSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiFailureCode.hpp"));
         string applicationHeaderSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiApplication.hpp"));
         string applicationSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiApplication.cpp"));
+        string normalizedApplicationSource = applicationSource.Replace("\r\n", "\n", StringComparison.Ordinal);
 
         Assert.Contains("SceneMaterializationBegin = 0xC120U", failureCodeSource, StringComparison.Ordinal);
         Assert.Contains("SceneEntityConstruction = 0xC121U", failureCodeSource, StringComparison.Ordinal);
@@ -1025,24 +1026,46 @@ public sealed class WiiRuntimeSourceTests {
         Assert.Contains("SpriteComponentDeserialization = 0xC135U", failureCodeSource, StringComparison.Ordinal);
         Assert.Contains("bool RefineSceneLoadFailureCheckpoint(const std::string& sceneLoadStage, const std::string& componentTypeId);", applicationHeaderSource, StringComparison.Ordinal);
         Assert.Contains("WiiFailureCode ResolveSceneComponentFailureCode(const std::string& componentTypeId) const;", applicationHeaderSource, StringComparison.Ordinal);
-        Assert.Contains("sceneTransitionStage.starts_with(\"SceneLoad:\")", applicationSource, StringComparison.Ordinal);
-        Assert.Contains("get_LastTraceComponentTypeId()", applicationSource, StringComparison.Ordinal);
 
-        Assert.Contains("\"LoadBegin\"", applicationSource, StringComparison.Ordinal);
-        Assert.Contains("\"BeforeRootEntityLoad\"", applicationSource, StringComparison.Ordinal);
-        Assert.Contains("\"LoadEntityBegin\"", applicationSource, StringComparison.Ordinal);
-        Assert.Contains("\"BeforeComponentLoad\"", applicationSource, StringComparison.Ordinal);
-        Assert.Contains("\"LoadComponentBegin\"", applicationSource, StringComparison.Ordinal);
-        Assert.Contains("\"BeforeChildEntityLoad\"", applicationSource, StringComparison.Ordinal);
-        Assert.Contains("\"LoadEntityEnd\"", applicationSource, StringComparison.Ordinal);
-        Assert.Contains("\"LoadEnd\"", applicationSource, StringComparison.Ordinal);
+        int drawRefinementStartIndex = normalizedApplicationSource.IndexOf("void WiiApplication::RefineDrawFailureCheckpoint()", StringComparison.Ordinal);
+        int componentResolverStartIndex = normalizedApplicationSource.IndexOf("WiiFailureCode WiiApplication::ResolveSceneComponentFailureCode", StringComparison.Ordinal);
+        int sceneLoadCheckpointStartIndex = normalizedApplicationSource.IndexOf("bool WiiApplication::RefineSceneLoadFailureCheckpoint", StringComparison.Ordinal);
+        int sceneManagerCheckpointStartIndex = normalizedApplicationSource.IndexOf("bool WiiApplication::RefineSceneManagerFailureCheckpoint", StringComparison.Ordinal);
+        Assert.True(drawRefinementStartIndex >= 0);
+        Assert.True(componentResolverStartIndex > drawRefinementStartIndex);
+        Assert.True(sceneLoadCheckpointStartIndex > componentResolverStartIndex);
+        Assert.True(sceneManagerCheckpointStartIndex > sceneLoadCheckpointStartIndex);
 
-        Assert.Contains("\"helengine.CameraComponent\"", applicationSource, StringComparison.Ordinal);
-        Assert.Contains("\"helengine.RoundedRectComponent\"", applicationSource, StringComparison.Ordinal);
-        Assert.Contains("\"helengine.ViewportComponent\"", applicationSource, StringComparison.Ordinal);
-        Assert.Contains("\"helengine.ReferenceCanvasFitComponent\"", applicationSource, StringComparison.Ordinal);
-        Assert.Contains("\"city.menu.HelenOfCodeSplashComponent, gameplay\"", applicationSource, StringComparison.Ordinal);
-        Assert.Contains("\"helengine.SpriteComponent\"", applicationSource, StringComparison.Ordinal);
+        string drawRefinementSource = normalizedApplicationSource.Substring(drawRefinementStartIndex, componentResolverStartIndex - drawRefinementStartIndex);
+        string componentResolverSource = normalizedApplicationSource.Substring(componentResolverStartIndex, sceneLoadCheckpointStartIndex - componentResolverStartIndex);
+        string sceneLoadCheckpointSource = normalizedApplicationSource.Substring(sceneLoadCheckpointStartIndex, sceneManagerCheckpointStartIndex - sceneLoadCheckpointStartIndex);
+
+        Assert.Contains("if (sceneLoadStage == \"LoadBegin\" || sceneLoadStage == \"BeforeRootEntityLoad\") {\n            SetFailureCheckpoint(WiiFailureCode::SceneMaterializationBegin);", sceneLoadCheckpointSource, StringComparison.Ordinal);
+        Assert.Contains("} else if (sceneLoadStage == \"LoadEntityBegin\") {\n            SetFailureCheckpoint(WiiFailureCode::SceneEntityConstruction);", sceneLoadCheckpointSource, StringComparison.Ordinal);
+        Assert.Contains("} else if (sceneLoadStage == \"BeforeComponentLoad\" || sceneLoadStage == \"LoadComponentBegin\") {\n            SetFailureCheckpoint(ResolveSceneComponentFailureCode(componentTypeId));", sceneLoadCheckpointSource, StringComparison.Ordinal);
+        Assert.Contains("} else if (sceneLoadStage == \"BeforeChildEntityLoad\") {\n            SetFailureCheckpoint(WiiFailureCode::SceneChildEntity);", sceneLoadCheckpointSource, StringComparison.Ordinal);
+        Assert.Contains("} else if (sceneLoadStage == \"LoadEntityEnd\") {\n            SetFailureCheckpoint(WiiFailureCode::SceneEntityCompletion);", sceneLoadCheckpointSource, StringComparison.Ordinal);
+        Assert.Contains("} else if (sceneLoadStage == \"LoadEnd\") {\n            SetFailureCheckpoint(WiiFailureCode::SceneMaterializationCompleted);", sceneLoadCheckpointSource, StringComparison.Ordinal);
+        Assert.Contains("} else {\n            return false;\n        }", sceneLoadCheckpointSource, StringComparison.Ordinal);
+
+        Assert.Contains("if (componentTypeId == \"helengine.CameraComponent\") {\n            return WiiFailureCode::CameraComponentDeserialization;", componentResolverSource, StringComparison.Ordinal);
+        Assert.Contains("} else if (componentTypeId == \"helengine.RoundedRectComponent\") {\n            return WiiFailureCode::RoundedRectComponentDeserialization;", componentResolverSource, StringComparison.Ordinal);
+        Assert.Contains("} else if (componentTypeId == \"helengine.ViewportComponent\") {\n            return WiiFailureCode::ViewportComponentDeserialization;", componentResolverSource, StringComparison.Ordinal);
+        Assert.Contains("} else if (componentTypeId == \"helengine.ReferenceCanvasFitComponent\") {\n            return WiiFailureCode::ReferenceCanvasFitComponentDeserialization;", componentResolverSource, StringComparison.Ordinal);
+        Assert.Contains("} else if (componentTypeId == \"city.menu.HelenOfCodeSplashComponent, gameplay\") {\n            return WiiFailureCode::SplashComponentDeserialization;", componentResolverSource, StringComparison.Ordinal);
+        Assert.Contains("} else if (componentTypeId == \"helengine.SpriteComponent\") {\n            return WiiFailureCode::SpriteComponentDeserialization;", componentResolverSource, StringComparison.Ordinal);
+        Assert.Contains("return WiiFailureCode::SceneComponentDeserialization;", componentResolverSource, StringComparison.Ordinal);
+
+        int directMarkerIndex = drawRefinementSource.IndexOf("sceneTransitionStage == \"AfterSceneLoadedEventDispatch\"", StringComparison.Ordinal);
+        int sceneLoadOwnershipIndex = drawRefinementSource.IndexOf("sceneTransitionStage.starts_with(\"SceneLoad:\")", StringComparison.Ordinal);
+        int sceneManagerOwnershipIndex = drawRefinementSource.IndexOf("sceneTransitionStage.starts_with(\"SceneManager:\")", StringComparison.Ordinal);
+        int outerDrawBeginIndex = drawRefinementSource.IndexOf("sceneTransitionStage == \"DrawBegin\"", StringComparison.Ordinal);
+        Assert.True(directMarkerIndex >= 0 && sceneLoadOwnershipIndex > directMarkerIndex);
+        Assert.True(sceneManagerOwnershipIndex > sceneLoadOwnershipIndex && outerDrawBeginIndex > sceneManagerOwnershipIndex);
+
+        string sceneLoadOwnershipSource = drawRefinementSource.Substring(sceneLoadOwnershipIndex, sceneManagerOwnershipIndex - sceneLoadOwnershipIndex);
+        Assert.Contains("EngineCore->get_SceneLoadService()->get_LastTraceStage()", sceneLoadOwnershipSource, StringComparison.Ordinal);
+        Assert.Contains("EngineCore->get_SceneLoadService()->get_LastTraceComponentTypeId()", sceneLoadOwnershipSource, StringComparison.Ordinal);
     }
 
     /// <summary>
