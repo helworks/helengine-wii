@@ -87,7 +87,7 @@ public sealed class WiiWiimmsIsoToolsImagePackager : IWiiImagePackager {
             startInfo.FileName = "powershell.exe";
             startInfo.ArgumentList.Add("-NoProfile");
             startInfo.ArgumentList.Add("-Command");
-            startInfo.ArgumentList.Add($"& '{windowsExecutablePath}' 'COPY' '{windowsDiscRootPath}' '{windowsOutputImagePath}' '--iso' '--trunc' '--overwrite' '--allow-fst=on'");
+            startInfo.ArgumentList.Add($"& '{windowsExecutablePath}' 'COPY' '{windowsDiscRootPath}' '{windowsOutputImagePath}' '--iso' '--trunc' '--overwrite' '--ios' '56' '--allow-fst=on'");
             return;
         }
 
@@ -98,6 +98,8 @@ public sealed class WiiWiimmsIsoToolsImagePackager : IWiiImagePackager {
         startInfo.ArgumentList.Add("--iso");
         startInfo.ArgumentList.Add("--trunc");
         startInfo.ArgumentList.Add("--overwrite");
+        startInfo.ArgumentList.Add("--ios");
+        startInfo.ArgumentList.Add("56");
         startInfo.ArgumentList.Add("--allow-fst=on");
     }
 

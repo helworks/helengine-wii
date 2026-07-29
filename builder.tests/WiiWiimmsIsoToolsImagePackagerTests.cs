@@ -100,6 +100,42 @@ public sealed class WiiWiimmsIsoToolsImagePackagerTests {
     }
 
     /// <summary>
+    /// Ensures native Wiimms ISO Tools packaging writes an IOS56 system-version request into the generated title metadata.
+    /// </summary>
+    [Fact]
+    public void Package_WhenWitRunsDirectly_RequestsIos56() {
+        string workingRootPath = Path.Combine(Path.GetTempPath(), "wii-wit-tests", Guid.NewGuid().ToString("N"));
+        string executablePath = Path.Combine(workingRootPath, "wit.exe");
+        string outputImagePath = Path.Combine(workingRootPath, "game.iso");
+        Directory.CreateDirectory(workingRootPath);
+        File.WriteAllText(executablePath, "fake");
+        FakeWiiProcessRunner processRunner = new(new WiiProcessRunResult(0, "ok", string.Empty));
+
+        WiiWiimmsIsoToolsImagePackager packager = new(
+            new WiiWiimmsIsoToolsOptions(executablePath),
+            processRunner,
+            static (layout, destinationImagePath) => File.WriteAllText(destinationImagePath, "iso"));
+
+        packager.Package(CreateLayout(), outputImagePath, CancellationToken.None);
+
+        int iosOptionIndex = processRunner.LastStartInfo.ArgumentList.IndexOf("--ios");
+        Assert.True(iosOptionIndex >= 0);
+        Assert.True(iosOptionIndex + 1 < processRunner.LastStartInfo.ArgumentList.Count);
+        Assert.Equal("56", processRunner.LastStartInfo.ArgumentList[iosOptionIndex + 1]);
+    }
+
+    /// <summary>
+    /// Ensures WSL-hosted packaging forwards the IOS56 request through the quoted Windows Wiimms ISO Tools command.
+    /// </summary>
+    [Fact]
+    public void PackageSource_WhenWslWrapsWindowsWit_RequestsIos56() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string packagerSource = File.ReadAllText(Path.Combine(repositoryRootPath, "builder", "WiiWiimmsIsoToolsImagePackager.cs"));
+
+        Assert.Contains("'--ios' '56'", packagerSource, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Ensures the packager normalizes extracted-disc and image paths to absolute paths before invoking <c>wit</c>.
     /// </summary>
     [Fact]
