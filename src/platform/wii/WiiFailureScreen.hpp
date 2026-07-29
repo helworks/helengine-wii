@@ -10,6 +10,9 @@ namespace helengine::wii {
     /// Draws a compact hexadecimal failure code directly into Wii external framebuffers.
     class WiiFailureScreen {
     public:
+        /// Returns the diagnostic background color assigned to the supplied persistent failure code.
+        static GXColor ResolveBackgroundColor(WiiFailureCode code);
+
         /// Writes the supplied code into both external framebuffers without using GX drawing, fonts, or assets.
         static void WriteCode(const GXRModeObj* renderMode, void* const frameBuffers[2], WiiFailureCode code);
 

@@ -972,6 +972,37 @@ public sealed class WiiRuntimeSourceTests {
     }
 
     /// <summary>
+    /// Ensures each draw diagnostic has a recognizable background and active failures override normal frame colors.
+    /// </summary>
+    [Fact]
+    public void DrawFailureDiagnostic_UsesDistinctCodeSpecificBackgrounds() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string failureScreenHeaderSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiFailureScreen.hpp"));
+        string failureScreenSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiFailureScreen.cpp"));
+        string applicationSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiApplication.cpp"));
+        string normalizedFailureScreenSource = failureScreenSource.ReplaceLineEndings("\n");
+
+        Assert.Contains("static GXColor ResolveBackgroundColor(WiiFailureCode code);", failureScreenHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("case WiiFailureCode::CoreDraw:\n                return GXColor { 0xC0, 0x40, 0x00, 0xFF };", normalizedFailureScreenSource, StringComparison.Ordinal);
+        Assert.Contains("case WiiFailureCode::SceneCommit:\n                return GXColor { 0x60, 0x20, 0x90, 0xFF };", normalizedFailureScreenSource, StringComparison.Ordinal);
+        Assert.Contains("case WiiFailureCode::OverlayCapture:\n                return GXColor { 0x00, 0x30, 0xA0, 0xFF };", normalizedFailureScreenSource, StringComparison.Ordinal);
+        Assert.Contains("case WiiFailureCode::FramePlanBuild:\n                return GXColor { 0x00, 0x70, 0x60, 0xFF };", normalizedFailureScreenSource, StringComparison.Ordinal);
+        Assert.Contains("case WiiFailureCode::RasterSubmission:\n                return GXColor { 0xA0, 0x00, 0x60, 0xFF };", normalizedFailureScreenSource, StringComparison.Ordinal);
+        Assert.Contains("case WiiFailureCode::DrawSetup:\n                return GXColor { 0x70, 0x30, 0x10, 0xFF };", normalizedFailureScreenSource, StringComparison.Ordinal);
+        Assert.Contains("case WiiFailureCode::FrameBoundaryBookkeeping:\n                return GXColor { 0x60, 0x60, 0x00, 0xFF };", normalizedFailureScreenSource, StringComparison.Ordinal);
+        Assert.Contains("case WiiFailureCode::RenderManagerBoundary:\n                return GXColor { 0x10, 0x20, 0x70, 0xFF };", normalizedFailureScreenSource, StringComparison.Ordinal);
+        Assert.Contains("case WiiFailureCode::PostRenderMetrics:\n                return GXColor { 0x00, 0x70, 0x90, 0xFF };", normalizedFailureScreenSource, StringComparison.Ordinal);
+        Assert.Contains("case WiiFailureCode::FpsRenderFrame:\n                return GXColor { 0x00, 0x70, 0x20, 0xFF };", normalizedFailureScreenSource, StringComparison.Ordinal);
+        Assert.Contains("case WiiFailureCode::DebugRenderFrame:\n                return GXColor { 0x70, 0x20, 0xA0, 0xFF };", normalizedFailureScreenSource, StringComparison.Ordinal);
+
+        int resolverIndex = applicationSource.IndexOf("GXColor WiiApplication::ResolvePresentedClearColor()", StringComparison.Ordinal);
+        int failureGuardIndex = applicationSource.IndexOf("if (FailureActive) {", resolverIndex, StringComparison.Ordinal);
+        int failureColorIndex = applicationSource.IndexOf("return WiiFailureScreen::ResolveBackgroundColor(FailureCode);", failureGuardIndex, StringComparison.Ordinal);
+        int generatedFrameIndex = applicationSource.IndexOf("if (EngineInitialized) {", resolverIndex, StringComparison.Ordinal);
+        Assert.True(resolverIndex >= 0 && failureGuardIndex > resolverIndex && failureColorIndex > failureGuardIndex && generatedFrameIndex > failureColorIndex);
+    }
+
+    /// <summary>
     /// Ensures Wii video output never exposes newly allocated framebuffer memory before a deliberate black clear.
     /// </summary>
     [Fact]

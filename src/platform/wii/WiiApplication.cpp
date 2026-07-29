@@ -765,6 +765,10 @@ namespace helengine::wii {
 
     /// Resolves the currently visible diagnostic color for the next presented frame.
     GXColor WiiApplication::ResolvePresentedClearColor() {
+        if (FailureActive) {
+            return WiiFailureScreen::ResolveBackgroundColor(FailureCode);
+        }
+
 #if HELENGINE_WII_HAS_GENERATED_CORE
         if (EngineInitialized) {
             UpdateCompletedSincePresent = false;

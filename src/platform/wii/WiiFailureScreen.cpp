@@ -13,6 +13,36 @@ namespace helengine::wii {
         constexpr uint32_t DigitCount = 4U;
     }
 
+    /// Returns the diagnostic background color assigned to the supplied persistent failure code.
+    GXColor WiiFailureScreen::ResolveBackgroundColor(WiiFailureCode code) {
+        switch (code) {
+            case WiiFailureCode::CoreDraw:
+                return GXColor { 0xC0, 0x40, 0x00, 0xFF };
+            case WiiFailureCode::SceneCommit:
+                return GXColor { 0x60, 0x20, 0x90, 0xFF };
+            case WiiFailureCode::OverlayCapture:
+                return GXColor { 0x00, 0x30, 0xA0, 0xFF };
+            case WiiFailureCode::FramePlanBuild:
+                return GXColor { 0x00, 0x70, 0x60, 0xFF };
+            case WiiFailureCode::RasterSubmission:
+                return GXColor { 0xA0, 0x00, 0x60, 0xFF };
+            case WiiFailureCode::DrawSetup:
+                return GXColor { 0x70, 0x30, 0x10, 0xFF };
+            case WiiFailureCode::FrameBoundaryBookkeeping:
+                return GXColor { 0x60, 0x60, 0x00, 0xFF };
+            case WiiFailureCode::RenderManagerBoundary:
+                return GXColor { 0x10, 0x20, 0x70, 0xFF };
+            case WiiFailureCode::PostRenderMetrics:
+                return GXColor { 0x00, 0x70, 0x90, 0xFF };
+            case WiiFailureCode::FpsRenderFrame:
+                return GXColor { 0x00, 0x70, 0x20, 0xFF };
+            case WiiFailureCode::DebugRenderFrame:
+                return GXColor { 0x70, 0x20, 0xA0, 0xFF };
+            default:
+                return GXColor { 0xFF, 0x00, 0x00, 0xFF };
+        }
+    }
+
     /// Writes the supplied code into both external framebuffers without using GX drawing, fonts, or assets.
     void WiiFailureScreen::WriteCode(const GXRModeObj* renderMode, void* const frameBuffers[2], WiiFailureCode code) {
         if (renderMode == nullptr || frameBuffers == nullptr || frameBuffers[0] == nullptr || frameBuffers[1] == nullptr) {
