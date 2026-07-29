@@ -6,6 +6,7 @@
 #include <gccore.h>
 
 #include "RenderManager3D.hpp"
+#include "platform/wii/WiiDrawStage.hpp"
 
 class ContentManager;
 class MaterialLayout;
@@ -74,6 +75,9 @@ namespace helengine::wii {
         /// Reports whether this backend has emitted a native scene frame.
         bool HasRenderedScene() const;
 
+        /// Returns the last Wii-native rendering boundary entered during the current generated-core draw call.
+        WiiDrawStage GetLastDrawStage() const;
+
         /// Returns whether the current frame resolved one authored camera clear color for presentation.
         bool HasPresentedClearColor() const;
 
@@ -98,6 +102,9 @@ namespace helengine::wii {
 
         /// Tracks whether the current frame resolved one authored camera clear color for presentation.
         bool PresentedClearColorValid;
+
+        /// Stores the last Wii-native rendering boundary entered for visible hardware failure diagnostics.
+        WiiDrawStage LastDrawStage;
 
         /// Stores the authored clear color that should be presented for the current frame when a camera enables it.
         GXColor PresentedClearColor;

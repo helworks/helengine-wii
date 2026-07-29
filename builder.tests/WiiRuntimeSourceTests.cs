@@ -897,6 +897,29 @@ public sealed class WiiRuntimeSourceTests {
     }
 
     /// <summary>
+    /// Ensures hardware draw failures retain the exact Wii-native renderer substage when no writable trace channel exists.
+    /// </summary>
+    [Fact]
+    public void DrawFailureDiagnostic_TracksNativeRendererSubstages() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string drawStageHeaderPath = Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiDrawStage.hpp");
+        string renderManagerHeaderSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRenderManager3D.hpp"));
+        string renderManagerSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiRenderManager3D.cpp"));
+
+        Assert.True(File.Exists(drawStageHeaderPath), "Expected WiiDrawStage.hpp to define the native draw diagnostic stages.");
+        string drawStageHeaderSource = File.ReadAllText(drawStageHeaderPath);
+        Assert.Contains("enum class WiiDrawStage : uint8_t", drawStageHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("OverlayCapture", drawStageHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("FramePlanBuild", drawStageHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("RasterSubmission", drawStageHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("WiiDrawStage GetLastDrawStage() const;", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("WiiDrawStage LastDrawStage;", renderManagerHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("LastDrawStage = WiiDrawStage::OverlayCapture;", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("LastDrawStage = WiiDrawStage::FramePlanBuild;", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("LastDrawStage = WiiDrawStage::RasterSubmission;", renderManagerSource, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Ensures Wii video output never exposes newly allocated framebuffer memory before a deliberate black clear.
     /// </summary>
     [Fact]

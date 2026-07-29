@@ -51,6 +51,7 @@ namespace helengine::wii {
         , RasterRenderer(new WiiRasterRenderer(MeshCache))
         , OverlayRenderManager2D(nullptr)
         , PresentedClearColorValid(false)
+        , LastDrawStage(WiiDrawStage::None)
         , PresentedClearColor { 0x00, 0x00, 0x00, 0xFF }
         , HasRenderedSceneValue(false)
         , PresentedFrameWidth(0U)
@@ -322,7 +323,9 @@ namespace helengine::wii {
             throw new InvalidOperationException("WiiRenderManager3D requires one presented framebuffer height before Draw().");
         }
 
+        LastDrawStage = WiiDrawStage::OverlayCapture;
         OverlayRenderManager2D->Draw();
+        LastDrawStage = WiiDrawStage::FramePlanBuild;
         WiiFramePlan* framePlan = SceneRenderBridge->BuildFramePlan(CapabilityProfile, MainWindowSize.X, MainWindowSize.Y, PresentedFrameWidth, PresentedFrameHeight);
         PresentedClearColorValid = false;
         if (framePlan == nullptr) {
@@ -338,6 +341,7 @@ namespace helengine::wii {
         }
 
         ExtractedFrameCount++;
+        LastDrawStage = WiiDrawStage::RasterSubmission;
         HasRenderedSceneValue = RasterRenderer->DrawFrame(framePlan);
         delete framePlan;
     }
@@ -371,6 +375,11 @@ namespace helengine::wii {
     /// Reports whether this backend has emitted a native scene frame.
     bool WiiRenderManager3D::HasRenderedScene() const {
         return HasRenderedSceneValue;
+    }
+
+    /// Returns the last Wii-native rendering boundary entered during the current generated-core draw call.
+    WiiDrawStage WiiRenderManager3D::GetLastDrawStage() const {
+        return LastDrawStage;
     }
 
     /// Returns whether the current frame resolved one authored camera clear color for presentation.
