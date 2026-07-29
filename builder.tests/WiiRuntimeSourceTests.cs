@@ -917,6 +917,30 @@ public sealed class WiiRuntimeSourceTests {
         Assert.Contains("LastDrawStage = WiiDrawStage::OverlayCapture;", renderManagerSource, StringComparison.Ordinal);
         Assert.Contains("LastDrawStage = WiiDrawStage::FramePlanBuild;", renderManagerSource, StringComparison.Ordinal);
         Assert.Contains("LastDrawStage = WiiDrawStage::RasterSubmission;", renderManagerSource, StringComparison.Ordinal);
+        Assert.Contains("LastDrawStage = WiiDrawStage::None;", renderManagerSource, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ensures caught generated-core draw failures refine the persistent red-screen code without requiring an external trace file.
+    /// </summary>
+    [Fact]
+    public void DrawFailureDiagnostic_MapsCaughtFailuresToPersistentVisibleCodes() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string failureCodeSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiFailureCode.hpp"));
+        string applicationHeaderSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiApplication.hpp"));
+        string applicationSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiApplication.cpp"));
+
+        Assert.Contains("SceneCommit = 0xC101U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("OverlayCapture = 0xC102U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("FramePlanBuild = 0xC103U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("RasterSubmission = 0xC104U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("void RefineDrawFailureCheckpoint();", applicationHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("void WiiApplication::RefineDrawFailureCheckpoint()", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("get_LastSceneTransitionStage()", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("WiiDrawStage::OverlayCapture", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("WiiDrawStage::FramePlanBuild", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("WiiDrawStage::RasterSubmission", applicationSource, StringComparison.Ordinal);
+        Assert.Equal(3, applicationSource.Split("RefineDrawFailureCheckpoint();", StringSplitOptions.None).Length - 1);
     }
 
     /// <summary>

@@ -709,6 +709,7 @@ namespace helengine::wii {
             return true;
         }
         catch (Exception* exception) {
+            RefineDrawFailureCheckpoint();
             EngineInitialized = false;
             FailBootPhase(WiiBootPhase::Failed, FailureClearColor);
             SYS_Report("[Wii] Engine draw threw Exception*: %s\n", exception != nullptr ? exception->what() : "<null>");
@@ -717,6 +718,7 @@ namespace helengine::wii {
             return false;
         }
         catch (const std::exception& exception) {
+            RefineDrawFailureCheckpoint();
             EngineInitialized = false;
             FailBootPhase(WiiBootPhase::Failed, FailureClearColor);
             SYS_Report("[Wii] Engine draw threw std::exception: %s\n", exception.what());
@@ -724,6 +726,7 @@ namespace helengine::wii {
             return false;
         }
         catch (...) {
+            RefineDrawFailureCheckpoint();
             EngineInitialized = false;
             FailBootPhase(WiiBootPhase::Failed, FailureClearColor);
             SYS_Report("[Wii] Engine draw threw.\n");
@@ -818,6 +821,38 @@ namespace helengine::wii {
     /// Records the runtime boundary that should be shown if the current operation fails.
     void WiiApplication::SetFailureCheckpoint(WiiFailureCode code) {
         FailureCode = code;
+    }
+
+    /// Refines a caught generated draw failure using the last scene or Wii-native rendering boundary entered.
+    void WiiApplication::RefineDrawFailureCheckpoint() {
+#if HELENGINE_WII_HAS_GENERATED_CORE
+        if (EngineCore != nullptr) {
+            const std::string sceneTransitionStage = EngineCore->get_LastSceneTransitionStage();
+            if (sceneTransitionStage == "BeforeCompleteFrameBoundary"
+                || sceneTransitionStage == "CompleteFrameBoundaryCommitBegin") {
+                SetFailureCheckpoint(WiiFailureCode::SceneCommit);
+                return;
+            }
+        }
+
+        if (EngineRenderManager3D == nullptr) {
+            return;
+        }
+
+        switch (EngineRenderManager3D->GetLastDrawStage()) {
+            case WiiDrawStage::OverlayCapture:
+                SetFailureCheckpoint(WiiFailureCode::OverlayCapture);
+                break;
+            case WiiDrawStage::FramePlanBuild:
+                SetFailureCheckpoint(WiiFailureCode::FramePlanBuild);
+                break;
+            case WiiDrawStage::RasterSubmission:
+                SetFailureCheckpoint(WiiFailureCode::RasterSubmission);
+                break;
+            case WiiDrawStage::None:
+                break;
+        }
+#endif
     }
 
     /// Returns whether runtime verification has presented the requested number of generated frames.

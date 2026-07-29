@@ -71,6 +71,9 @@ namespace helengine::wii {
         /// Records the runtime boundary that should be shown if the current operation fails.
         void SetFailureCheckpoint(WiiFailureCode code);
 
+        /// Refines a caught generated draw failure using the last scene or Wii-native rendering boundary entered.
+        void RefineDrawFailureCheckpoint();
+
         /// Returns whether runtime verification has presented the requested number of generated frames.
         bool HasSatisfiedVerificationExitCondition() const;
 

@@ -54,6 +54,18 @@ namespace helengine::wii {
         CoreDraw = 0xC002U,
 
         /// Captured 2D commands were being submitted to the Wii renderer.
-        RenderCapturedCommands = 0xC003U
+        RenderCapturedCommands = 0xC003U,
+
+        /// Pending scene operations and packaged assets were being committed at the generated draw boundary.
+        SceneCommit = 0xC101U,
+
+        /// The Wii 2D renderer was capturing overlay drawables for the native frame.
+        OverlayCapture = 0xC102U,
+
+        /// The Wii scene bridge was constructing and validating the native frame plan.
+        FramePlanBuild = 0xC103U,
+
+        /// The Wii raster renderer was submitting the native frame plan through GX.
+        RasterSubmission = 0xC104U
     };
 }

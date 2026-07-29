@@ -330,6 +330,7 @@ namespace helengine::wii {
         PresentedClearColorValid = false;
         if (framePlan == nullptr) {
             HasRenderedSceneValue = false;
+            LastDrawStage = WiiDrawStage::None;
             return;
         }
 
@@ -337,6 +338,7 @@ namespace helengine::wii {
         if (framePlan->DrawableSubmissions->get_Count() <= 0) {
             HasRenderedSceneValue = false;
             delete framePlan;
+            LastDrawStage = WiiDrawStage::None;
             return;
         }
 
@@ -344,6 +346,7 @@ namespace helengine::wii {
         LastDrawStage = WiiDrawStage::RasterSubmission;
         HasRenderedSceneValue = RasterRenderer->DrawFrame(framePlan);
         delete framePlan;
+        LastDrawStage = WiiDrawStage::None;
     }
 
     /// Registers the 2D overlay render manager used by the generated draw path.
