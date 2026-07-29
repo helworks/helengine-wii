@@ -817,6 +817,32 @@ public sealed class WiiRuntimeSourceTests {
     }
 
     /// <summary>
+    /// Ensures the Wii failure screen renders a fixed hexadecimal code directly into both external framebuffers without fonts, assets, or GX draw submission.
+    /// </summary>
+    [Fact]
+    public void FailureScreen_WritesHexCodeDirectlyIntoBothExternalFramebuffers() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string makefileSource = File.ReadAllText(Path.Combine(repositoryRootPath, "Makefile"));
+        string headerPath = Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiFailureScreen.hpp");
+        string sourcePath = Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiFailureScreen.cpp");
+
+        Assert.True(File.Exists(headerPath), "Expected WiiFailureScreen.hpp to exist.");
+        Assert.True(File.Exists(sourcePath), "Expected WiiFailureScreen.cpp to exist.");
+
+        string headerSource = File.ReadAllText(headerPath);
+        string source = File.ReadAllText(sourcePath);
+        Assert.Contains("class WiiFailureScreen", headerSource, StringComparison.Ordinal);
+        Assert.Contains("static void WriteCode(const GXRModeObj* renderMode, void* const frameBuffers[2], WiiFailureCode code);", headerSource, StringComparison.Ordinal);
+        Assert.Contains("constexpr uint32_t ForegroundColor = 0xEB80EB80U;", source, StringComparison.Ordinal);
+        Assert.Contains("constexpr uint32_t BackgroundColor = 0x10801080U;", source, StringComparison.Ordinal);
+        Assert.Contains("for (uint32_t frameBufferIndex = 0U; frameBufferIndex < 2U; frameBufferIndex++)", source, StringComparison.Ordinal);
+        Assert.Contains("static constexpr uint8_t GlyphRows[16][5]", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("GX_Begin", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("CON_Init", source, StringComparison.Ordinal);
+        Assert.Contains("$(SOURCE_DIR)/platform/wii/WiiFailureScreen.cpp", makefileSource, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Ensures the Wii runtime advances the shared engine at the console refresh cadence instead of applying a missed-refresh wall-clock jump to animations.
     /// </summary>
     [Fact]

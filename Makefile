@@ -14,7 +14,8 @@ SOURCE_DIR := src
 LIBOGC_WII_LIB_DIR := $(LIBOGC)/lib/wii
 BASE_SOURCES := \
 	$(SOURCE_DIR)/main.cpp \
-	$(SOURCE_DIR)/platform/wii/WiiApplication.cpp
+	$(SOURCE_DIR)/platform/wii/WiiApplication.cpp \
+	$(SOURCE_DIR)/platform/wii/WiiFailureScreen.cpp
 GENERATED_BRIDGE_SOURCES :=
 GENERATED_CORE_SOURCE :=
 GENERATED_CORE_TRANSLATION_UNIT :=
