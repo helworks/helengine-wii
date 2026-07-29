@@ -826,8 +826,9 @@ namespace helengine::wii {
     /// Refines a caught generated draw failure using the last scene or Wii-native rendering boundary entered.
     void WiiApplication::RefineDrawFailureCheckpoint() {
 #if HELENGINE_WII_HAS_GENERATED_CORE
+        std::string sceneTransitionStage;
         if (EngineCore != nullptr) {
-            const std::string sceneTransitionStage = EngineCore->get_LastSceneTransitionStage();
+            sceneTransitionStage = EngineCore->get_LastSceneTransitionStage();
             if (sceneTransitionStage == "BeforeCompleteFrameBoundary"
                 || sceneTransitionStage == "CompleteFrameBoundaryCommitBegin") {
                 SetFailureCheckpoint(WiiFailureCode::SceneCommit);
@@ -835,22 +836,35 @@ namespace helengine::wii {
             }
         }
 
-        if (EngineRenderManager3D == nullptr) {
-            return;
+        if (EngineRenderManager3D != nullptr) {
+            switch (EngineRenderManager3D->GetLastDrawStage()) {
+                case WiiDrawStage::OverlayCapture:
+                    SetFailureCheckpoint(WiiFailureCode::OverlayCapture);
+                    return;
+                case WiiDrawStage::FramePlanBuild:
+                    SetFailureCheckpoint(WiiFailureCode::FramePlanBuild);
+                    return;
+                case WiiDrawStage::RasterSubmission:
+                    SetFailureCheckpoint(WiiFailureCode::RasterSubmission);
+                    return;
+                case WiiDrawStage::None:
+                    break;
+            }
         }
 
-        switch (EngineRenderManager3D->GetLastDrawStage()) {
-            case WiiDrawStage::OverlayCapture:
-                SetFailureCheckpoint(WiiFailureCode::OverlayCapture);
-                break;
-            case WiiDrawStage::FramePlanBuild:
-                SetFailureCheckpoint(WiiFailureCode::FramePlanBuild);
-                break;
-            case WiiDrawStage::RasterSubmission:
-                SetFailureCheckpoint(WiiFailureCode::RasterSubmission);
-                break;
-            case WiiDrawStage::None:
-                break;
+        if (sceneTransitionStage == "DrawBegin") {
+            SetFailureCheckpoint(WiiFailureCode::DrawSetup);
+        } else if (sceneTransitionStage == "CompleteFrameBoundaryCommitEnd"
+            || sceneTransitionStage == "AfterCompleteFrameBoundary") {
+            SetFailureCheckpoint(WiiFailureCode::FrameBoundaryBookkeeping);
+        } else if (sceneTransitionStage == "BeforeRenderManager3DDraw") {
+            SetFailureCheckpoint(WiiFailureCode::RenderManagerBoundary);
+        } else if (sceneTransitionStage == "AfterRenderManager3DDraw") {
+            SetFailureCheckpoint(WiiFailureCode::PostRenderMetrics);
+        } else if (sceneTransitionStage == "BeforeFpsRenderFrame") {
+            SetFailureCheckpoint(WiiFailureCode::FpsRenderFrame);
+        } else if (sceneTransitionStage == "BeforeDebugRenderFrame") {
+            SetFailureCheckpoint(WiiFailureCode::DebugRenderFrame);
         }
 #endif
     }

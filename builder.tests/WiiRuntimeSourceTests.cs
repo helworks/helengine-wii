@@ -944,6 +944,34 @@ public sealed class WiiRuntimeSourceTests {
     }
 
     /// <summary>
+    /// Ensures generated draw boundaries after scene commit refine failures without replacing more precise native renderer stages.
+    /// </summary>
+    [Fact]
+    public void DrawFailureDiagnostic_MapsRemainingGeneratedDrawStages() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string failureCodeSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiFailureCode.hpp"));
+        string applicationSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiApplication.cpp"));
+
+        Assert.Contains("DrawSetup = 0xC105U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("FrameBoundaryBookkeeping = 0xC106U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("RenderManagerBoundary = 0xC107U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("PostRenderMetrics = 0xC108U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("FpsRenderFrame = 0xC109U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("DebugRenderFrame = 0xC10AU", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("sceneTransitionStage == \"DrawBegin\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("sceneTransitionStage == \"CompleteFrameBoundaryCommitEnd\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("sceneTransitionStage == \"AfterCompleteFrameBoundary\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("sceneTransitionStage == \"BeforeRenderManager3DDraw\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("sceneTransitionStage == \"AfterRenderManager3DDraw\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("sceneTransitionStage == \"BeforeFpsRenderFrame\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("sceneTransitionStage == \"BeforeDebugRenderFrame\"", applicationSource, StringComparison.Ordinal);
+
+        int nativeStageIndex = applicationSource.IndexOf("GetLastDrawStage()", StringComparison.Ordinal);
+        int generatedStageIndex = applicationSource.IndexOf("sceneTransitionStage == \"DrawBegin\"", StringComparison.Ordinal);
+        Assert.True(nativeStageIndex >= 0 && generatedStageIndex > nativeStageIndex);
+    }
+
+    /// <summary>
     /// Ensures Wii video output never exposes newly allocated framebuffer memory before a deliberate black clear.
     /// </summary>
     [Fact]

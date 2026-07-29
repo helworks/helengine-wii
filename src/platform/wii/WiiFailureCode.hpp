@@ -66,6 +66,24 @@ namespace helengine::wii {
         FramePlanBuild = 0xC103U,
 
         /// The Wii raster renderer was submitting the native frame plan through GX.
-        RasterSubmission = 0xC104U
+        RasterSubmission = 0xC104U,
+
+        /// The generated core draw method had entered its frame setup boundary.
+        DrawSetup = 0xC105U,
+
+        /// The generated core had completed or exited frame-boundary scene bookkeeping.
+        FrameBoundaryBookkeeping = 0xC106U,
+
+        /// The generated core was about to call the platform 3D render manager.
+        RenderManagerBoundary = 0xC107U,
+
+        /// The generated core had returned from native rendering and was recording frame metrics.
+        PostRenderMetrics = 0xC108U,
+
+        /// The generated core was recording the FPS component's rendered-frame counter.
+        FpsRenderFrame = 0xC109U,
+
+        /// The generated core was recording the debug component's rendered-frame counter.
+        DebugRenderFrame = 0xC10AU
     };
 }
