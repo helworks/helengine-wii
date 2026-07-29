@@ -299,10 +299,7 @@ namespace helengine::wii {
 
 #if HELENGINE_WII_HAS_GENERATED_CORE
         if (!InitializeEngineCore()) {
-            while (!ShutdownRequested) {
-                PresentFrame();
-            }
-
+            PresentFailureUntilShutdown();
             return 0;
         }
 #endif
@@ -310,13 +307,13 @@ namespace helengine::wii {
         while (!ShutdownRequested) {
 #if HELENGINE_WII_HAS_GENERATED_CORE
             if (!UpdateEngineCore()) {
-                PresentFrame();
-                return 1;
+                PresentFailureUntilShutdown();
+                return 0;
             }
 
             if (!DrawEngineCore()) {
-                PresentFrame();
-                return 1;
+                PresentFailureUntilShutdown();
+                return 0;
             }
 #endif
             PresentFrame();
@@ -754,6 +751,13 @@ namespace helengine::wii {
         VIDEO_Flush();
         VIDEO_WaitVSync();
         PresentedFrameCount++;
+    }
+
+    /// Presents the active failure framebuffer until a registered reset or power callback requests shutdown.
+    void WiiApplication::PresentFailureUntilShutdown() {
+        while (!ShutdownRequested) {
+            PresentFrame();
+        }
     }
 
     /// Resolves the currently visible diagnostic color for the next presented frame.

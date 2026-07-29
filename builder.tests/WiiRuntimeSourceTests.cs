@@ -873,6 +873,30 @@ public sealed class WiiRuntimeSourceTests {
     }
 
     /// <summary>
+    /// Ensures update and draw failures keep their red checkpoint visible until the user requests shutdown.
+    /// </summary>
+    [Fact]
+    public void FailureScreen_LatchesRuntimeFailuresUntilShutdown() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string applicationHeaderSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiApplication.hpp"));
+        string applicationSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiApplication.cpp"));
+
+        Assert.Contains("void PresentFailureUntilShutdown();", applicationHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("void WiiApplication::PresentFailureUntilShutdown()", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("while (!ShutdownRequested) {", applicationSource, StringComparison.Ordinal);
+
+        int updateFailureIndex = applicationSource.IndexOf("if (!UpdateEngineCore()) {", StringComparison.Ordinal);
+        int updateLatchIndex = applicationSource.IndexOf("PresentFailureUntilShutdown();", updateFailureIndex, StringComparison.Ordinal);
+        int updateSuccessBoundaryIndex = applicationSource.IndexOf("if (!DrawEngineCore()) {", updateFailureIndex, StringComparison.Ordinal);
+        Assert.True(updateFailureIndex >= 0 && updateLatchIndex > updateFailureIndex && updateLatchIndex < updateSuccessBoundaryIndex);
+
+        int drawFailureIndex = updateSuccessBoundaryIndex;
+        int drawLatchIndex = applicationSource.IndexOf("PresentFailureUntilShutdown();", drawFailureIndex, StringComparison.Ordinal);
+        int framePresentIndex = applicationSource.IndexOf("PresentFrame();", drawFailureIndex, StringComparison.Ordinal);
+        Assert.True(drawFailureIndex >= 0 && drawLatchIndex > drawFailureIndex && drawLatchIndex < framePresentIndex);
+    }
+
+    /// <summary>
     /// Ensures Wii video output never exposes newly allocated framebuffer memory before a deliberate black clear.
     /// </summary>
     [Fact]

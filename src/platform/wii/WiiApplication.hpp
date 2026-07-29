@@ -47,6 +47,9 @@ namespace helengine::wii {
         /// Presents one fallback or generated frame to the active framebuffer.
         void PresentFrame();
 
+        /// Presents the active failure framebuffer until a registered reset or power callback requests shutdown.
+        void PresentFailureUntilShutdown();
+
         /// Resolves the currently visible diagnostic color for the next presented frame.
         GXColor ResolvePresentedClearColor();
 
