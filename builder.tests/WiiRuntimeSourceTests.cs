@@ -1128,6 +1128,56 @@ public sealed class WiiRuntimeSourceTests {
     }
 
     /// <summary>
+    /// Ensures every scene-load diagnostic stage has a unique, stable failure-screen background color.
+    /// </summary>
+    [Fact]
+    public void DrawFailureDiagnostic_UsesDistinctSceneLoadBackgrounds() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string failureScreenSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiFailureScreen.cpp"));
+        string normalizedFailureScreenSource = failureScreenSource.ReplaceLineEndings("\n");
+        Dictionary<string, string> expectedBackgrounds = new() {
+            ["SceneOperationCommit"] = "GXColor { 0x70, 0x10, 0x10, 0xFF }",
+            ["ScenePathResolution"] = "GXColor { 0x80, 0x28, 0x08, 0xFF }",
+            ["SceneRecordLookup"] = "GXColor { 0x78, 0x48, 0x00, 0xFF }",
+            ["SceneContentLoad"] = "GXColor { 0x68, 0x60, 0x00, 0xFF }",
+            ["SceneMaterializationCall"] = "GXColor { 0x38, 0x68, 0x00, 0xFF }",
+            ["SceneMaterializationReturn"] = "GXColor { 0x08, 0x68, 0x18, 0xFF }",
+            ["SceneRecordTrack"] = "GXColor { 0x00, 0x68, 0x48, 0xFF }",
+            ["SceneRecordListInsertion"] = "GXColor { 0x00, 0x58, 0x70, 0xFF }",
+            ["SceneRecordDictionaryInsertion"] = "GXColor { 0x00, 0x38, 0x80, 0xFF }",
+            ["SceneLoadedEvent"] = "GXColor { 0x28, 0x28, 0x80, 0xFF }",
+            ["SceneLoadedEventReturned"] = "GXColor { 0x50, 0x20, 0x80, 0xFF }",
+            ["SceneLoadedEventArgsRelease"] = "GXColor { 0x78, 0x10, 0x70, 0xFF }",
+            ["SceneLoadedEventArgsReleased"] = "GXColor { 0x80, 0x18, 0x48, 0xFF }",
+            ["SceneLoadCleanup"] = "GXColor { 0x58, 0x38, 0x48, 0xFF }",
+            ["SceneMaterializationBegin"] = "GXColor { 0x50, 0x18, 0x08, 0xFF }",
+            ["SceneEntityConstruction"] = "GXColor { 0x60, 0x38, 0x08, 0xFF }",
+            ["SceneComponentDeserialization"] = "GXColor { 0x58, 0x58, 0x10, 0xFF }",
+            ["SceneChildEntity"] = "GXColor { 0x20, 0x58, 0x20, 0xFF }",
+            ["SceneEntityCompletion"] = "GXColor { 0x10, 0x50, 0x58, 0xFF }",
+            ["SceneMaterializationCompleted"] = "GXColor { 0x20, 0x30, 0x68, 0xFF }",
+            ["CameraComponentDeserialization"] = "GXColor { 0x68, 0x18, 0x30, 0xFF }",
+            ["RoundedRectComponentDeserialization"] = "GXColor { 0x68, 0x30, 0x18, 0xFF }",
+            ["ViewportComponentDeserialization"] = "GXColor { 0x48, 0x58, 0x08, 0xFF }",
+            ["ReferenceCanvasFitComponentDeserialization"] = "GXColor { 0x18, 0x58, 0x38, 0xFF }",
+            ["SplashComponentDeserialization"] = "GXColor { 0x18, 0x40, 0x68, 0xFF }",
+            ["SpriteComponentDeserialization"] = "GXColor { 0x48, 0x18, 0x68, 0xFF }",
+            ["OwnedTextureRegistration"] = "GXColor { 0x48, 0x20, 0x10, 0xFF }",
+            ["OwnedFontRegistration"] = "GXColor { 0x58, 0x40, 0x10, 0xFF }",
+            ["OwnedAudioRegistration"] = "GXColor { 0x38, 0x58, 0x18, 0xFF }",
+            ["OwnedModelRegistration"] = "GXColor { 0x10, 0x58, 0x50, 0xFF }",
+            ["OwnedMaterialRegistration"] = "GXColor { 0x18, 0x38, 0x70, 0xFF }",
+            ["OwnedAssetRegistrationCompleted"] = "GXColor { 0x50, 0x18, 0x58, 0xFF }"
+        };
+
+        foreach (KeyValuePair<string, string> expectedBackground in expectedBackgrounds) {
+            Assert.Contains($"case WiiFailureCode::{expectedBackground.Key}:\n                return {expectedBackground.Value};", normalizedFailureScreenSource, StringComparison.Ordinal);
+        }
+
+        Assert.Equal(expectedBackgrounds.Count, expectedBackgrounds.Values.Distinct(StringComparer.Ordinal).Count());
+    }
+
+    /// <summary>
     /// Ensures Wii video output never exposes newly allocated framebuffer memory before a deliberate black clear.
     /// </summary>
     [Fact]

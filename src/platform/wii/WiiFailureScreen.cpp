@@ -38,6 +38,70 @@ namespace helengine::wii {
                 return GXColor { 0x00, 0x70, 0x20, 0xFF };
             case WiiFailureCode::DebugRenderFrame:
                 return GXColor { 0x70, 0x20, 0xA0, 0xFF };
+            case WiiFailureCode::SceneOperationCommit:
+                return GXColor { 0x70, 0x10, 0x10, 0xFF };
+            case WiiFailureCode::ScenePathResolution:
+                return GXColor { 0x80, 0x28, 0x08, 0xFF };
+            case WiiFailureCode::SceneRecordLookup:
+                return GXColor { 0x78, 0x48, 0x00, 0xFF };
+            case WiiFailureCode::SceneContentLoad:
+                return GXColor { 0x68, 0x60, 0x00, 0xFF };
+            case WiiFailureCode::SceneMaterializationCall:
+                return GXColor { 0x38, 0x68, 0x00, 0xFF };
+            case WiiFailureCode::SceneMaterializationReturn:
+                return GXColor { 0x08, 0x68, 0x18, 0xFF };
+            case WiiFailureCode::SceneRecordTrack:
+                return GXColor { 0x00, 0x68, 0x48, 0xFF };
+            case WiiFailureCode::SceneRecordListInsertion:
+                return GXColor { 0x00, 0x58, 0x70, 0xFF };
+            case WiiFailureCode::SceneRecordDictionaryInsertion:
+                return GXColor { 0x00, 0x38, 0x80, 0xFF };
+            case WiiFailureCode::SceneLoadedEvent:
+                return GXColor { 0x28, 0x28, 0x80, 0xFF };
+            case WiiFailureCode::SceneLoadedEventReturned:
+                return GXColor { 0x50, 0x20, 0x80, 0xFF };
+            case WiiFailureCode::SceneLoadedEventArgsRelease:
+                return GXColor { 0x78, 0x10, 0x70, 0xFF };
+            case WiiFailureCode::SceneLoadedEventArgsReleased:
+                return GXColor { 0x80, 0x18, 0x48, 0xFF };
+            case WiiFailureCode::SceneLoadCleanup:
+                return GXColor { 0x58, 0x38, 0x48, 0xFF };
+            case WiiFailureCode::SceneMaterializationBegin:
+                return GXColor { 0x50, 0x18, 0x08, 0xFF };
+            case WiiFailureCode::SceneEntityConstruction:
+                return GXColor { 0x60, 0x38, 0x08, 0xFF };
+            case WiiFailureCode::SceneComponentDeserialization:
+                return GXColor { 0x58, 0x58, 0x10, 0xFF };
+            case WiiFailureCode::SceneChildEntity:
+                return GXColor { 0x20, 0x58, 0x20, 0xFF };
+            case WiiFailureCode::SceneEntityCompletion:
+                return GXColor { 0x10, 0x50, 0x58, 0xFF };
+            case WiiFailureCode::SceneMaterializationCompleted:
+                return GXColor { 0x20, 0x30, 0x68, 0xFF };
+            case WiiFailureCode::CameraComponentDeserialization:
+                return GXColor { 0x68, 0x18, 0x30, 0xFF };
+            case WiiFailureCode::RoundedRectComponentDeserialization:
+                return GXColor { 0x68, 0x30, 0x18, 0xFF };
+            case WiiFailureCode::ViewportComponentDeserialization:
+                return GXColor { 0x48, 0x58, 0x08, 0xFF };
+            case WiiFailureCode::ReferenceCanvasFitComponentDeserialization:
+                return GXColor { 0x18, 0x58, 0x38, 0xFF };
+            case WiiFailureCode::SplashComponentDeserialization:
+                return GXColor { 0x18, 0x40, 0x68, 0xFF };
+            case WiiFailureCode::SpriteComponentDeserialization:
+                return GXColor { 0x48, 0x18, 0x68, 0xFF };
+            case WiiFailureCode::OwnedTextureRegistration:
+                return GXColor { 0x48, 0x20, 0x10, 0xFF };
+            case WiiFailureCode::OwnedFontRegistration:
+                return GXColor { 0x58, 0x40, 0x10, 0xFF };
+            case WiiFailureCode::OwnedAudioRegistration:
+                return GXColor { 0x38, 0x58, 0x18, 0xFF };
+            case WiiFailureCode::OwnedModelRegistration:
+                return GXColor { 0x10, 0x58, 0x50, 0xFF };
+            case WiiFailureCode::OwnedMaterialRegistration:
+                return GXColor { 0x18, 0x38, 0x70, 0xFF };
+            case WiiFailureCode::OwnedAssetRegistrationCompleted:
+                return GXColor { 0x50, 0x18, 0x58, 0xFF };
             default:
                 return GXColor { 0xFF, 0x00, 0x00, 0xFF };
         }
