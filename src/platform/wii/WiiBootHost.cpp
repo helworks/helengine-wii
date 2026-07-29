@@ -8,7 +8,7 @@
 namespace helengine::wii {
     namespace {
         constexpr std::size_t DefaultFifoSize = 256 * 1024;
-        constexpr GXColor PinkClearColor { 0xFF, 0x69, 0xB4, 0xFF };
+        constexpr GXColor BlackClearColor { 0x00, 0x00, 0x00, 0xFF };
     }
 
     /// Creates the Wii boot host with no initialized native state.
@@ -51,6 +51,7 @@ namespace helengine::wii {
             return false;
         }
 
+        VIDEO_ClearFrameBuffer(RenderMode, FrameBuffer, COLOR_BLACK);
         VIDEO_Configure(RenderMode);
         VIDEO_SetNextFramebuffer(FrameBuffer);
         VIDEO_SetBlack(FALSE);
@@ -97,9 +98,9 @@ namespace helengine::wii {
         return true;
     }
 
-    /// Presents one solid pink frame to the active framebuffer.
+    /// Presents one solid black frame to the active framebuffer.
     void WiiBootHost::PresentFrame() {
-        GX_SetCopyClear(PinkClearColor, 0x00FFFFFF);
+        GX_SetCopyClear(BlackClearColor, 0x00FFFFFF);
         GX_CopyDisp(FrameBuffer, GX_TRUE);
         GX_DrawDone();
         GX_Flush();

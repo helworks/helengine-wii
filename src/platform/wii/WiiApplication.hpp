@@ -5,6 +5,7 @@
 #include <gccore.h>
 
 #include "platform/wii/WiiBootPhase.hpp"
+#include "platform/wii/WiiFailureCode.hpp"
 
 class Core;
 class IAudioBackend;
@@ -64,6 +65,9 @@ namespace helengine::wii {
         /// Marks the current boot phase as failed and updates the visible clear color.
         void FailBootPhase(WiiBootPhase phase, GXColor color);
 
+        /// Records the runtime boundary that should be shown if the current operation fails.
+        void SetFailureCheckpoint(WiiFailureCode code);
+
         /// Returns whether runtime verification has presented the requested number of generated frames.
         bool HasSatisfiedVerificationExitCondition() const;
 
@@ -84,6 +88,12 @@ namespace helengine::wii {
 
         /// Stores the current host boot phase.
         WiiBootPhase BootPhase;
+
+        /// Stores the last risky runtime boundary entered for direct failure reporting.
+        WiiFailureCode FailureCode;
+
+        /// Tracks whether presentation should overlay the current failure code.
+        bool FailureActive;
 
         /// Tracks whether the generated engine core finished initialization.
         bool EngineInitialized;

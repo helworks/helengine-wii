@@ -14,6 +14,8 @@
 #include <ogc/system.h>
 #include <wiiuse/wpad.h>
 
+#include "platform/wii/WiiFailureScreen.hpp"
+
 #if HELENGINE_WII_HAS_GENERATED_CORE
 #include "Core.hpp"
 #include "CoreInitializationOptions.hpp"
@@ -50,7 +52,7 @@ namespace helengine::wii {
     namespace {
         volatile bool ShutdownRequested = false;
         constexpr std::size_t DefaultFifoSize = 256 * 1024;
-        constexpr GXColor PinkClearColor { 0xFF, 0x69, 0xB4, 0xFF };
+        constexpr GXColor BlackClearColor { 0x00, 0x00, 0x00, 0xFF };
         constexpr GXColor FailureClearColor { 0xFF, 0x00, 0x00, 0xFF };
         constexpr const char* RuntimeTracePaths[] = {
             "sd:/runtime_registry_trace.txt",
@@ -248,8 +250,10 @@ namespace helengine::wii {
         , FrameBuffers { nullptr, nullptr }
         , FrameBufferIndex(0)
         , FifoBuffer(nullptr)
-        , ClearColor(PinkClearColor)
+        , ClearColor(BlackClearColor)
         , BootPhase(WiiBootPhase::NativeStartup)
+        , FailureCode(WiiFailureCode::Unknown)
+        , FailureActive(false)
         , EngineInitialized(false)
         , PresentedFrameCount(0)
         , VerifiedFrameCount(0)
@@ -339,6 +343,8 @@ namespace helengine::wii {
             return false;
         }
 
+        VIDEO_ClearFrameBuffer(RenderMode, FrameBuffers[0], COLOR_BLACK);
+        VIDEO_ClearFrameBuffer(RenderMode, FrameBuffers[1], COLOR_BLACK);
         VIDEO_Configure(RenderMode);
         VIDEO_SetNextFramebuffer(FrameBuffers[FrameBufferIndex]);
         VIDEO_SetBlack(FALSE);
@@ -401,11 +407,13 @@ namespace helengine::wii {
             AppendRuntimeTrace("\n=== Wii runtime session %s ===\n", BuildStamp);
             SYS_Report("[Wii] InitializeEngineCore begin.\n");
             initializationStage = "ConstructCore";
-            SetBootPhase(WiiBootPhase::CoreConstruction, GXColor { 0xFF, 0xFF, 0x00, 0xFF });
+            SetBootPhase(WiiBootPhase::CoreConstruction, BlackClearColor);
+            SetFailureCheckpoint(WiiFailureCode::CoreConstruction);
             EngineCore = new Core();
 
             initializationStage = "ReadInitializationOptions";
-            SetBootPhase(WiiBootPhase::CoreOptions, GXColor { 0xFF, 0x80, 0x00, 0xFF });
+            SetBootPhase(WiiBootPhase::CoreOptions, BlackClearColor);
+            SetFailureCheckpoint(WiiFailureCode::CoreOptions);
             CoreInitializationOptions* options = EngineCore->get_InitializationOptions();
             if (options == nullptr) {
                 FailBootPhase(WiiBootPhase::Failed, FailureClearColor);
@@ -413,13 +421,15 @@ namespace helengine::wii {
             }
 
             initializationStage = "ConfigureSceneBootstrap";
-            SetBootPhase(WiiBootPhase::SceneBootstrap, GXColor { 0x40, 0x80, 0xFF, 0xFF });
+            SetBootPhase(WiiBootPhase::SceneBootstrap, BlackClearColor);
 #if HELENGINE_WII_PACKAGED_DISC_BOOT
+            SetFailureCheckpoint(WiiFailureCode::PackagedStorage);
             if (!WiiSceneBootstrap::InitializePackagedStorage()) {
                 FailBootPhase(WiiBootPhase::SceneBootstrap, FailureClearColor);
                 SYS_Report("[Wii] Runtime content root initialization failed.\n");
                 return false;
             }
+            SetFailureCheckpoint(WiiFailureCode::ContentConfiguration);
             const std::string packagedContentRootPath = WiiSceneBootstrap::GetPackagedContentRootPath();
             SYS_Report("[Wii] Runtime content root: %s\n", packagedContentRootPath.c_str());
             AppendRuntimeTrace("[WiiFile] Runtime content root: %s\n", packagedContentRootPath.c_str());
@@ -429,6 +439,7 @@ namespace helengine::wii {
             SYS_Report("[Wii] Runtime startup scene id: %s\n", packagedStartupSceneId.c_str());
             AppendRuntimeTrace("[WiiFile] Runtime startup scene id: %s\n", packagedStartupSceneId.c_str());
 #else
+            SetFailureCheckpoint(WiiFailureCode::ContentConfiguration);
             const std::string contentRootPath = WiiSceneBootstrap::GetValidatedContentRootPath();
             const std::string startupSceneId = WiiSceneBootstrap::GetStartupSceneId();
             SYS_Report("[Wii] Staged content root: %s\n", contentRootPath.c_str());
@@ -451,7 +462,8 @@ namespace helengine::wii {
             }));
 
             initializationStage = "ConstructBridgeServices";
-            SetBootPhase(WiiBootPhase::BridgeConstruction, GXColor { 0x00, 0xFF, 0xFF, 0xFF });
+            SetBootPhase(WiiBootPhase::BridgeConstruction, BlackClearColor);
+            SetFailureCheckpoint(WiiFailureCode::BridgeConstruction);
             EngineRenderManager3D = new WiiRenderManager3D();
             EngineRenderManager2D = new WiiRenderManager2D();
             EngineRenderManager3D->SetOverlayRenderManager2D(EngineRenderManager2D);
@@ -460,19 +472,22 @@ namespace helengine::wii {
             EnginePlatformInfo = new PlatformInfo("wii", "1.0");
 
             initializationStage = "AddPrimaryWindow";
-            SetBootPhase(WiiBootPhase::CoreInitialization, GXColor { 0x00, 0x00, 0xFF, 0xFF });
+            SetBootPhase(WiiBootPhase::CoreInitialization, BlackClearColor);
             const uint16_t logicalFrameWidth = ResolveLogicalFrameWidth();
             const uint16_t logicalFrameHeight = ResolveLogicalFrameHeight();
+            SetFailureCheckpoint(WiiFailureCode::PrimaryWindow);
             EngineRenderManager3D->AddWindow(0, logicalFrameWidth, logicalFrameHeight);
             EngineRenderManager3D->SetPresentedFrameSize(static_cast<uint16_t>(RenderMode->fbWidth), static_cast<uint16_t>(RenderMode->efbHeight));
 
             initializationStage = "InitializeCore";
+            SetFailureCheckpoint(WiiFailureCode::CoreInitialization);
             EngineCore->Initialize(EngineRenderManager3D, EngineRenderManager2D, EngineInputManager, EnginePlatformInfo, options);
             EngineCore->SetAudioBackend(EngineAudioBackend);
             SYS_Report("[Wii] Engine core initialized.\n");
             AppendRuntimeTrace("[WiiFile] Engine core initialized.\n");
 #if HELENGINE_WII_HAS_GENERATED_RUNTIME_MODULE_REGISTRATION
             initializationStage = "RegisterGeneratedRuntimeModules";
+            SetFailureCheckpoint(WiiFailureCode::RuntimeModuleRegistration);
             RegisterGeneratedRuntimeModules(EngineCore);
             SYS_Report("[Wii] Generated runtime modules registered.\n");
             AppendRuntimeTrace("[WiiFile] Generated runtime modules registered.\n");
@@ -502,7 +517,8 @@ namespace helengine::wii {
         }
 
         try {
-            SetBootPhase(WiiBootPhase::SceneLoad, GXColor { 0x80, 0xC0, 0x40, 0xFF });
+            SetBootPhase(WiiBootPhase::SceneLoad, BlackClearColor);
+            SetFailureCheckpoint(WiiFailureCode::SceneQueue);
             if (EngineCore->get_SceneManager() == nullptr) {
 #if HELENGINE_WII_PACKAGED_DISC_BOOT
                 throw std::runtime_error("Manifest-backed Wii boot requires a runtime scene manager.");
@@ -525,7 +541,7 @@ namespace helengine::wii {
             VerifiedFrameCount = 0;
             UpdateCompletedSincePresent = false;
             DrawCompletedSincePresent = false;
-            SetBootPhase(WiiBootPhase::Running, GXColor { 0x00, 0xFF, 0x00, 0xFF });
+            SetBootPhase(WiiBootPhase::Running, BlackClearColor);
             return true;
         }
         catch (const std::exception& exception) {
@@ -558,17 +574,20 @@ namespace helengine::wii {
     /// Advances one engine frame when the generated core was initialized successfully.
     bool WiiApplication::UpdateEngineCore() {
 #if HELENGINE_WII_HAS_GENERATED_CORE
+        SetFailureCheckpoint(WiiFailureCode::UpdatePrecondition);
         if (!EngineInitialized || EngineCore == nullptr || EngineRenderManager2D == nullptr) {
             FailBootPhase(WiiBootPhase::Failed, FailureClearColor);
             return false;
         }
 
         try {
-            SetBootPhase(WiiBootPhase::CoreUpdate, GXColor { 0x00, 0xA0, 0x00, 0xFF });
+            SetBootPhase(WiiBootPhase::CoreUpdate, BlackClearColor);
             if (UpdateFrameLogCount < 8U) {
                 SYS_Report("[Wii] Engine update begin frame=%lu\n", static_cast<unsigned long>(UpdateFrameLogCount));
             }
+            SetFailureCheckpoint(WiiFailureCode::BeginFrame);
             EngineRenderManager2D->BeginFrame();
+            SetFailureCheckpoint(WiiFailureCode::CoreUpdate);
             EngineCore->Update(1.0 / 60.0);
             if (UpdateFrameLogCount < 8U && EngineCore->get_SceneManager() != nullptr) {
                 SYS_Report(
@@ -605,6 +624,7 @@ namespace helengine::wii {
                     EngineCore->get_SceneLoadService()->get_LastTextFontRelativePath().c_str(),
                     EngineCore->get_SceneLoadService()->get_LastTextureRelativePath().c_str());
             }
+            SetFailureCheckpoint(WiiFailureCode::ReleaseFlush);
             EngineRenderManager2D->FlushReleasedTextures();
             if (EngineRenderManager3D != nullptr) {
                 EngineRenderManager3D->FlushReleasedAssets();
@@ -648,19 +668,22 @@ namespace helengine::wii {
     /// Draws one engine frame when the generated core was initialized successfully.
     bool WiiApplication::DrawEngineCore() {
 #if HELENGINE_WII_HAS_GENERATED_CORE
+        SetFailureCheckpoint(WiiFailureCode::DrawPrecondition);
         if (!EngineInitialized || EngineCore == nullptr || EngineRenderManager3D == nullptr || EngineRenderManager2D == nullptr) {
             FailBootPhase(WiiBootPhase::Failed, FailureClearColor);
             return false;
         }
 
         try {
-            SetBootPhase(WiiBootPhase::CoreDraw, GXColor { 0x00, 0x60, 0x00, 0xFF });
+            SetBootPhase(WiiBootPhase::CoreDraw, BlackClearColor);
             if (DrawFrameLogCount < 8U) {
                 SYS_Report("[Wii] Engine draw begin frame=%lu\n", static_cast<unsigned long>(DrawFrameLogCount));
             }
+            SetFailureCheckpoint(WiiFailureCode::CoreDraw);
             EngineCore->Draw();
             const uint16_t logicalFrameWidth = ResolveLogicalFrameWidth();
             const uint16_t logicalFrameHeight = ResolveLogicalFrameHeight();
+            SetFailureCheckpoint(WiiFailureCode::RenderCapturedCommands);
             EngineRenderManager2D->RenderCapturedCommands(
                 logicalFrameWidth,
                 logicalFrameHeight,
@@ -724,6 +747,9 @@ namespace helengine::wii {
         GX_SetAlphaUpdate(GX_TRUE);
         GX_CopyDisp(FrameBuffers[FrameBufferIndex], GX_TRUE);
         GX_DrawDone();
+        if (FailureActive) {
+            WiiFailureScreen::WriteCode(RenderMode, FrameBuffers, FailureCode);
+        }
         VIDEO_SetNextFramebuffer(FrameBuffers[FrameBufferIndex]);
         VIDEO_Flush();
         VIDEO_WaitVSync();
@@ -782,6 +808,12 @@ namespace helengine::wii {
     void WiiApplication::FailBootPhase(WiiBootPhase phase, GXColor color) {
         BootPhase = phase;
         ClearColor = color;
+        FailureActive = true;
+    }
+
+    /// Records the runtime boundary that should be shown if the current operation fails.
+    void WiiApplication::SetFailureCheckpoint(WiiFailureCode code) {
+        FailureCode = code;
     }
 
     /// Returns whether runtime verification has presented the requested number of generated frames.

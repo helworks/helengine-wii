@@ -843,6 +843,54 @@ public sealed class WiiRuntimeSourceTests {
     }
 
     /// <summary>
+    /// Ensures runtime failures retain the last typed checkpoint and overlay it only after GX has completed the red display copy.
+    /// </summary>
+    [Fact]
+    public void FailureScreen_UsesTrackedCheckpointOnlyAfterFailureDisplayCopyCompletes() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string applicationHeaderSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiApplication.hpp"));
+        string applicationSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiApplication.cpp"));
+        string failureCodeSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiFailureCode.hpp"));
+
+        Assert.Contains("WiiFailureCode FailureCode;", applicationHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("bool FailureActive;", applicationHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("void SetFailureCheckpoint(WiiFailureCode code);", applicationHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("FailureCode(WiiFailureCode::Unknown)", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("FailureActive(false)", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("FailureActive = true;", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("SetFailureCheckpoint(WiiFailureCode::PackagedStorage);", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("SetFailureCheckpoint(WiiFailureCode::CoreUpdate);", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("SetFailureCheckpoint(WiiFailureCode::CoreDraw);", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("PackagedStorage = 0xA003U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("CoreUpdate = 0xB004U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("CoreDraw = 0xC002U", failureCodeSource, StringComparison.Ordinal);
+
+        int drawDoneIndex = applicationSource.IndexOf("GX_DrawDone();", StringComparison.Ordinal);
+        int failureGuardIndex = applicationSource.IndexOf("if (FailureActive) {", drawDoneIndex, StringComparison.Ordinal);
+        int overlayIndex = applicationSource.IndexOf("WiiFailureScreen::WriteCode(RenderMode, FrameBuffers, FailureCode);", failureGuardIndex, StringComparison.Ordinal);
+        Assert.True(drawDoneIndex >= 0 && failureGuardIndex > drawDoneIndex && overlayIndex > failureGuardIndex);
+    }
+
+    /// <summary>
+    /// Ensures Wii video output never exposes newly allocated framebuffer memory before a deliberate black clear.
+    /// </summary>
+    [Fact]
+    public void FailureScreen_ClearsAllStartupFramebuffersBeforeEnablingVideoOutput() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string applicationSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiApplication.cpp"));
+        string bootHostSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiBootHost.cpp"));
+
+        int applicationFirstClearIndex = applicationSource.IndexOf("VIDEO_ClearFrameBuffer(RenderMode, FrameBuffers[0], COLOR_BLACK);", StringComparison.Ordinal);
+        int applicationSecondClearIndex = applicationSource.IndexOf("VIDEO_ClearFrameBuffer(RenderMode, FrameBuffers[1], COLOR_BLACK);", StringComparison.Ordinal);
+        int applicationEnableIndex = applicationSource.IndexOf("VIDEO_SetBlack(FALSE);", StringComparison.Ordinal);
+        Assert.True(applicationFirstClearIndex >= 0 && applicationSecondClearIndex > applicationFirstClearIndex && applicationEnableIndex > applicationSecondClearIndex);
+
+        int bootHostClearIndex = bootHostSource.IndexOf("VIDEO_ClearFrameBuffer(RenderMode, FrameBuffer, COLOR_BLACK);", StringComparison.Ordinal);
+        int bootHostEnableIndex = bootHostSource.IndexOf("VIDEO_SetBlack(FALSE);", StringComparison.Ordinal);
+        Assert.True(bootHostClearIndex >= 0 && bootHostEnableIndex > bootHostClearIndex);
+    }
+
+    /// <summary>
     /// Ensures the Wii runtime advances the shared engine at the console refresh cadence instead of applying a missed-refresh wall-clock jump to animations.
     /// </summary>
     [Fact]
