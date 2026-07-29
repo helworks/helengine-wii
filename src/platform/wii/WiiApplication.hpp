@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 
 #include <gccore.h>
 
@@ -73,6 +74,9 @@ namespace helengine::wii {
 
         /// Refines a caught generated draw failure using the last scene or Wii-native rendering boundary entered.
         void RefineDrawFailureCheckpoint();
+
+        /// Maps a scene-manager trace stage to its corresponding visible draw-failure diagnostic code.
+        bool RefineSceneManagerFailureCheckpoint(const std::string& sceneManagerStage);
 
         /// Returns whether runtime verification has presented the requested number of generated frames.
         bool HasSatisfiedVerificationExitCondition() const;

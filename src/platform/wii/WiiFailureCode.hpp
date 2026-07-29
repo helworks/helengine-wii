@@ -68,6 +68,66 @@ namespace helengine::wii {
         /// The Wii raster renderer was submitting the native frame plan through GX.
         RasterSubmission = 0xC104U,
 
+        /// The scene manager was committing a queued operation at the generated frame boundary.
+        SceneOperationCommit = 0xC110U,
+
+        /// The scene manager was resolving the content path for a requested scene.
+        ScenePathResolution = 0xC111U,
+
+        /// The scene manager was locating or preparing the record that tracks a loaded scene.
+        SceneRecordLookup = 0xC112U,
+
+        /// The scene manager was beginning the requested scene content load.
+        SceneContentLoad = 0xC113U,
+
+        /// The scene manager was calling the service that materializes scene content.
+        SceneMaterializationCall = 0xC114U,
+
+        /// The scene materialization service had returned control to the scene manager.
+        SceneMaterializationReturn = 0xC115U,
+
+        /// The scene manager was preparing to track a newly materialized scene record.
+        SceneRecordTrack = 0xC116U,
+
+        /// The scene manager had added a scene record to its ordered loaded-scene list.
+        SceneRecordListInsertion = 0xC117U,
+
+        /// The scene manager had added a scene record to its lookup dictionary.
+        SceneRecordDictionaryInsertion = 0xC118U,
+
+        /// The scene manager was dispatching the scene-loaded event.
+        SceneLoadedEvent = 0xC119U,
+
+        /// The scene-loaded event dispatch had returned to generated core code.
+        SceneLoadedEventReturned = 0xC11AU,
+
+        /// Generated core code was about to release scene-loaded event arguments.
+        SceneLoadedEventArgsRelease = 0xC11BU,
+
+        /// Generated core code had released scene-loaded event arguments.
+        SceneLoadedEventArgsReleased = 0xC11CU,
+
+        /// Generated scene loading was releasing transition assets or completing cleanup.
+        SceneLoadCleanup = 0xC11DU,
+
+        /// The scene manager was registering textures owned by a newly loaded scene.
+        OwnedTextureRegistration = 0xC140U,
+
+        /// The scene manager was registering fonts owned by a newly loaded scene.
+        OwnedFontRegistration = 0xC141U,
+
+        /// The scene manager was registering audio assets owned by a newly loaded scene.
+        OwnedAudioRegistration = 0xC142U,
+
+        /// The scene manager was registering models owned by a newly loaded scene.
+        OwnedModelRegistration = 0xC143U,
+
+        /// The scene manager was registering materials owned by a newly loaded scene.
+        OwnedMaterialRegistration = 0xC144U,
+
+        /// The scene manager had completed registration of all assets owned by a newly loaded scene.
+        OwnedAssetRegistrationCompleted = 0xC145U,
+
         /// The generated core draw method had entered its frame setup boundary.
         DrawSetup = 0xC105U,
 

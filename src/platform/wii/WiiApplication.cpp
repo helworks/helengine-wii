@@ -833,11 +833,6 @@ namespace helengine::wii {
         std::string sceneTransitionStage;
         if (EngineCore != nullptr) {
             sceneTransitionStage = EngineCore->get_LastSceneTransitionStage();
-            if (sceneTransitionStage == "BeforeCompleteFrameBoundary"
-                || sceneTransitionStage == "CompleteFrameBoundaryCommitBegin") {
-                SetFailureCheckpoint(WiiFailureCode::SceneCommit);
-                return;
-            }
         }
 
         if (EngineRenderManager3D != nullptr) {
@@ -856,7 +851,32 @@ namespace helengine::wii {
             }
         }
 
-        if (sceneTransitionStage == "DrawBegin") {
+        if (sceneTransitionStage == "AfterSceneLoadedEventDispatch") {
+            SetFailureCheckpoint(WiiFailureCode::SceneLoadedEventReturned);
+            return;
+        } else if (sceneTransitionStage == "BeforeSceneLoadedEventArgsRelease") {
+            SetFailureCheckpoint(WiiFailureCode::SceneLoadedEventArgsRelease);
+            return;
+        } else if (sceneTransitionStage == "AfterSceneLoadedEventArgsRelease") {
+            SetFailureCheckpoint(WiiFailureCode::SceneLoadedEventArgsReleased);
+            return;
+        } else if (sceneTransitionStage == "AfterTransitionSceneAssetRelease"
+            || sceneTransitionStage == "AfterSceneTransitionCommit") {
+            SetFailureCheckpoint(WiiFailureCode::SceneLoadCleanup);
+            return;
+        }
+
+        if (sceneTransitionStage.starts_with("SceneManager:")
+            && EngineCore != nullptr
+            && EngineCore->get_SceneManager() != nullptr
+            && RefineSceneManagerFailureCheckpoint(EngineCore->get_SceneManager()->get_LastTraceStage())) {
+            return;
+        }
+
+        if (sceneTransitionStage == "BeforeCompleteFrameBoundary"
+            || sceneTransitionStage == "CompleteFrameBoundaryCommitBegin") {
+            SetFailureCheckpoint(WiiFailureCode::SceneCommit);
+        } else if (sceneTransitionStage == "DrawBegin") {
             SetFailureCheckpoint(WiiFailureCode::DrawSetup);
         } else if (sceneTransitionStage == "CompleteFrameBoundaryCommitEnd"
             || sceneTransitionStage == "AfterCompleteFrameBoundary") {
@@ -871,6 +891,59 @@ namespace helengine::wii {
             SetFailureCheckpoint(WiiFailureCode::DebugRenderFrame);
         }
 #endif
+    }
+
+    /// Maps a scene-manager trace stage to its corresponding visible draw-failure diagnostic code.
+    bool WiiApplication::RefineSceneManagerFailureCheckpoint(const std::string& sceneManagerStage) {
+        if (sceneManagerStage == "CommitPendingOperationsAtFrameBoundaryBegin"
+            || sceneManagerStage == "CommitPendingOperationsAtFrameBoundaryOperation"
+            || sceneManagerStage == "CommitPendingOperationsAtFrameBoundaryEnd") {
+            SetFailureCheckpoint(WiiFailureCode::SceneOperationCommit);
+        } else if (sceneManagerStage == "LoadSceneImmediateBegin"
+            || sceneManagerStage == "LoadSceneImmediateBeforeResolveSceneContentPath") {
+            SetFailureCheckpoint(WiiFailureCode::ScenePathResolution);
+        } else if (sceneManagerStage == "LoadSceneImmediateAfterResolveSceneContentPath"
+            || sceneManagerStage == "LoadSceneImmediateBeforeLoadedSceneRecordLookup"
+            || sceneManagerStage == "LoadSceneImmediateAfterLoadedSceneRecordLookup"
+            || sceneManagerStage == "LoadSceneImmediateDisposeUntrackedRoots"
+            || sceneManagerStage == "LoadSceneImmediateUnloadSingleModeScenes"
+            || sceneManagerStage == "LoadSceneImmediateFlushReleasedTextures"
+            || sceneManagerStage == "LoadSceneImmediateResetPhysicsTiming") {
+            SetFailureCheckpoint(WiiFailureCode::SceneRecordLookup);
+        } else if (sceneManagerStage == "LoadSceneImmediateBeforeContentLoad") {
+            SetFailureCheckpoint(WiiFailureCode::SceneContentLoad);
+        } else if (sceneManagerStage == "LoadSceneImmediateBeforeSceneLoadServiceLoad") {
+            SetFailureCheckpoint(WiiFailureCode::SceneMaterializationCall);
+        } else if (sceneManagerStage == "LoadSceneImmediateAfterSceneLoadServiceLoad") {
+            SetFailureCheckpoint(WiiFailureCode::SceneMaterializationReturn);
+        } else if (sceneManagerStage == "LoadSceneImmediateBeforeLoadedSceneRecordTrack") {
+            SetFailureCheckpoint(WiiFailureCode::SceneRecordTrack);
+        } else if (sceneManagerStage == "LoadSceneImmediateAfterLoadedSceneRecordListAdd") {
+            SetFailureCheckpoint(WiiFailureCode::SceneRecordListInsertion);
+        } else if (sceneManagerStage == "LoadSceneImmediateAfterLoadedSceneRecordDictionaryAdd") {
+            SetFailureCheckpoint(WiiFailureCode::SceneRecordDictionaryInsertion);
+        } else if (sceneManagerStage == "LoadSceneImmediateBeforeSceneLoadedEvent") {
+            SetFailureCheckpoint(WiiFailureCode::SceneLoadedEvent);
+        } else if (sceneManagerStage == "LoadSceneImmediateAfterSceneLoadedEvent"
+            || sceneManagerStage == "LoadSceneImmediateEnd") {
+            SetFailureCheckpoint(WiiFailureCode::SceneLoadCleanup);
+        } else if (sceneManagerStage == "LoadSceneImmediateBeforeRegisterOwnedTextures") {
+            SetFailureCheckpoint(WiiFailureCode::OwnedTextureRegistration);
+        } else if (sceneManagerStage == "LoadSceneImmediateBeforeRegisterOwnedFonts") {
+            SetFailureCheckpoint(WiiFailureCode::OwnedFontRegistration);
+        } else if (sceneManagerStage == "LoadSceneImmediateBeforeRegisterOwnedAudio") {
+            SetFailureCheckpoint(WiiFailureCode::OwnedAudioRegistration);
+        } else if (sceneManagerStage == "LoadSceneImmediateBeforeRegisterOwnedModels") {
+            SetFailureCheckpoint(WiiFailureCode::OwnedModelRegistration);
+        } else if (sceneManagerStage == "LoadSceneImmediateBeforeRegisterOwnedMaterials") {
+            SetFailureCheckpoint(WiiFailureCode::OwnedMaterialRegistration);
+        } else if (sceneManagerStage == "LoadSceneImmediateAfterRegisterOwnedAssets") {
+            SetFailureCheckpoint(WiiFailureCode::OwnedAssetRegistrationCompleted);
+        } else {
+            return false;
+        }
+
+        return true;
     }
 
     /// Returns whether runtime verification has presented the requested number of generated frames.

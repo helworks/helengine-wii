@@ -944,6 +944,64 @@ public sealed class WiiRuntimeSourceTests {
     }
 
     /// <summary>
+    /// Ensures draw-failure diagnostics distinguish scene-manager transition stages and the owned asset registrations that follow scene materialization.
+    /// </summary>
+    [Fact]
+    public void DrawFailureDiagnostic_MapsSceneManagerTraceStages() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string failureCodeSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiFailureCode.hpp"));
+        string applicationHeaderSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiApplication.hpp"));
+        string applicationSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiApplication.cpp"));
+
+        Assert.Contains("SceneOperationCommit = 0xC110U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("ScenePathResolution = 0xC111U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("SceneRecordLookup = 0xC112U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("SceneContentLoad = 0xC113U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("SceneMaterializationCall = 0xC114U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("SceneMaterializationReturn = 0xC115U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("SceneRecordTrack = 0xC116U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("SceneRecordListInsertion = 0xC117U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("SceneRecordDictionaryInsertion = 0xC118U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("SceneLoadedEvent = 0xC119U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("SceneLoadedEventReturned = 0xC11AU", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("SceneLoadedEventArgsRelease = 0xC11BU", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("SceneLoadedEventArgsReleased = 0xC11CU", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("SceneLoadCleanup = 0xC11DU", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("OwnedTextureRegistration = 0xC140U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("OwnedFontRegistration = 0xC141U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("OwnedAudioRegistration = 0xC142U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("OwnedModelRegistration = 0xC143U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("OwnedMaterialRegistration = 0xC144U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("OwnedAssetRegistrationCompleted = 0xC145U", failureCodeSource, StringComparison.Ordinal);
+        Assert.Contains("bool RefineSceneManagerFailureCheckpoint(const std::string& sceneManagerStage);", applicationHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("sceneTransitionStage.starts_with(\"SceneManager:\")", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("EngineCore->get_SceneManager()->get_LastTraceStage()", applicationSource, StringComparison.Ordinal);
+
+        Assert.Contains("\"CommitPendingOperationsAtFrameBoundaryOperation\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("\"LoadSceneImmediateBeforeResolveSceneContentPath\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("\"LoadSceneImmediateBeforeLoadedSceneRecordLookup\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("\"LoadSceneImmediateBeforeContentLoad\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("\"LoadSceneImmediateBeforeSceneLoadServiceLoad\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("\"LoadSceneImmediateAfterSceneLoadServiceLoad\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("\"LoadSceneImmediateBeforeLoadedSceneRecordTrack\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("\"LoadSceneImmediateAfterLoadedSceneRecordListAdd\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("\"LoadSceneImmediateAfterLoadedSceneRecordDictionaryAdd\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("\"LoadSceneImmediateBeforeSceneLoadedEvent\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("\"LoadSceneImmediateAfterSceneLoadedEvent\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("\"LoadSceneImmediateBeforeRegisterOwnedTextures\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("\"LoadSceneImmediateBeforeRegisterOwnedFonts\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("\"LoadSceneImmediateBeforeRegisterOwnedAudio\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("\"LoadSceneImmediateBeforeRegisterOwnedModels\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("\"LoadSceneImmediateBeforeRegisterOwnedMaterials\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("\"LoadSceneImmediateAfterRegisterOwnedAssets\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("\"AfterSceneLoadedEventDispatch\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("\"BeforeSceneLoadedEventArgsRelease\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("\"AfterSceneLoadedEventArgsRelease\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("\"AfterTransitionSceneAssetRelease\"", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("\"AfterSceneTransitionCommit\"", applicationSource, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Ensures generated draw boundaries after scene commit refine failures without replacing more precise native renderer stages.
     /// </summary>
     [Fact]
