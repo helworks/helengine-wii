@@ -102,10 +102,10 @@ Assert.Contains("get_LastSceneTransitionStage()", applicationSource, StringCompa
 Assert.Contains("WiiDrawStage::OverlayCapture", applicationSource, StringComparison.Ordinal);
 Assert.Contains("WiiDrawStage::FramePlanBuild", applicationSource, StringComparison.Ordinal);
 Assert.Contains("WiiDrawStage::RasterSubmission", applicationSource, StringComparison.Ordinal);
-Assert.Equal(4, applicationSource.Split("RefineDrawFailureCheckpoint();", StringSplitOptions.None).Length - 1);
+Assert.Equal(3, applicationSource.Split("RefineDrawFailureCheckpoint();", StringSplitOptions.None).Length - 1);
 ```
 
-The expected count includes the method definition plus one call in each of the three catch blocks.
+The expected count covers one call in each of the three catch blocks; the method definition has no trailing semicolon.
 
 - [ ] **Step 2: Run the focused mapping test and verify it fails**
 
