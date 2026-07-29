@@ -13,7 +13,6 @@
 #include <vector>
 
 #include <di/di.h>
-#include <ogc/dvd.h>
 #include <ogc/system.h>
 
 #include "system/io/file-stream.hpp"
@@ -35,8 +34,7 @@ namespace helengine::wii {
         std::vector<uint8_t> FstBytes;
         std::vector<WiiDiscFileEntry> FileEntries;
         bool IndexLoaded = false;
-        uint32_t PartitionDataOffset = 0U;
-        bool PartitionDataOffsetConfigured = false;
+        bool OpenedPartitionInitialized = false;
         uint32_t DiscReadLogCount = 0U;
 
         std::size_t Align32(std::size_t value) {
@@ -94,8 +92,8 @@ namespace helengine::wii {
         bool ReadDiscRange(void* destination, std::size_t offset, std::size_t length) {
             if (destination == nullptr) {
                 return false;
-            } else if (!PartitionDataOffsetConfigured) {
-                SYS_Report("[Wii] Partition data offset was not configured before DVD reads.\n");
+            } else if (!OpenedPartitionInitialized) {
+                SYS_Report("[Wii] Packaged reads were requested before the opened partition was initialized.\n");
                 return false;
             }
 
@@ -105,7 +103,6 @@ namespace helengine::wii {
             while (remainingLength > 0U) {
                 const std::size_t chunkLength = std::min(remainingLength, MaxDiReadLength);
                 const std::size_t wordOffset = currentOffset >> 2U;
-                const std::size_t absoluteOffset = static_cast<std::size_t>(PartitionDataOffset) + currentOffset;
                 const std::size_t alignedLength = Align32(chunkLength);
                 uint8_t* alignedBuffer = static_cast<uint8_t*>(memalign(32, alignedLength));
                 if (alignedBuffer == nullptr) {
@@ -115,9 +112,8 @@ namespace helengine::wii {
 
                 std::memset(alignedBuffer, 0, alignedLength);
                 if (DiscReadLogCount < 8U) {
-                    SYS_Report("[Wii] DI_Read begin relative=%lu absolute=%lu wordOffset=%lu copyLength=%lu alignedLength=%lu\n",
+                    SYS_Report("[Wii] DI_Read begin relative=%lu wordOffset=%lu copyLength=%lu alignedLength=%lu\n",
                         static_cast<unsigned long>(currentOffset),
-                        static_cast<unsigned long>(absoluteOffset),
                         static_cast<unsigned long>(wordOffset),
                         static_cast<unsigned long>(chunkLength),
                         static_cast<unsigned long>(alignedLength));
@@ -125,10 +121,8 @@ namespace helengine::wii {
 
                 const int readResult = DI_Read(alignedBuffer, static_cast<u32>(alignedLength), static_cast<u32>(wordOffset));
                 if (readResult < 0) {
-                    SYS_Report("[Wii] DI_Read failed base=%08lX offset=%lu absolute=%lu wordOffset=%lu copyLength=%lu alignedLength=%lu result=%d\n",
-                        static_cast<unsigned long>(PartitionDataOffset),
+                    SYS_Report("[Wii] DI_Read failed offset=%lu wordOffset=%lu copyLength=%lu alignedLength=%lu result=%d\n",
                         static_cast<unsigned long>(currentOffset),
-                        static_cast<unsigned long>(absoluteOffset),
                         static_cast<unsigned long>(wordOffset),
                         static_cast<unsigned long>(chunkLength),
                         static_cast<unsigned long>(alignedLength),
@@ -158,16 +152,14 @@ namespace helengine::wii {
         }
     }
 
-    /// Configures the opened Wii partition data offset used to validate packaged reads and log their absolute disc positions.
-    void WiiDiscFileSystem::ConfigurePartitionDataOffset(uint32_t partitionDataOffset) {
-        PartitionDataOffset = partitionDataOffset;
-        PartitionDataOffsetConfigured = true;
+    /// Initializes packaged reads for the encrypted partition already opened by the disc apploader or USB loader.
+    void WiiDiscFileSystem::InitializeOpenedPartition() {
+        OpenedPartitionInitialized = true;
         IndexLoaded = false;
         DiscReadLogCount = 0U;
         FileEntries.clear();
         FstBytes.clear();
-        SYS_Report("[Wii] WiiDiscFileSystem partition data offset configured: data=%08lX\n",
-            static_cast<unsigned long>(PartitionDataOffset));
+        SYS_Report("[Wii] WiiDiscFileSystem initialized for the opened encrypted partition.\n");
     }
 
     /// Returns whether the supplied path should be resolved from the packaged Wii disc image.
@@ -184,7 +176,7 @@ namespace helengine::wii {
         return exists;
     }
 
-    /// Opens one packaged Wii disc file as a read-only memory-backed stream loaded from DVD sectors.
+    /// Opens one packaged Wii disc file as a read-only memory-backed stream loaded from the encrypted partition.
     FileStream* WiiDiscFileSystem::OpenRead(const char* path) {
         std::size_t discOffset = 0;
         std::size_t fileSize = 0;

@@ -1,17 +1,16 @@
 #pragma once
 
 #include <cstddef>
-#include <cstdint>
 #include <string>
 
 class FileStream;
 
 namespace helengine::wii {
-    /// Provides read-only packaged Wii disc access by indexing the mounted disc FST and reading file ranges from the DVD device.
+    /// Provides read-only packaged Wii disc access by indexing the apploader FST and reading files from the opened encrypted partition.
     class WiiDiscFileSystem {
     public:
-        /// Configures the opened Wii partition data offset used to validate that packaged reads happen only after the decrypted DI partition is ready.
-        static void ConfigurePartitionDataOffset(uint32_t partitionDataOffset);
+        /// Initializes packaged reads for the encrypted partition already opened by the disc apploader or USB loader.
+        static void InitializeOpenedPartition();
 
         /// Returns whether the supplied path should be resolved from the packaged Wii disc image.
         static bool CanHandlePath(const char* path);
@@ -19,7 +18,7 @@ namespace helengine::wii {
         /// Returns whether the supplied packaged Wii disc path resolves to a file entry in the indexed disc FST.
         static bool Exists(const char* path);
 
-        /// Opens one packaged Wii disc file as a read-only memory-backed stream loaded from DVD sectors.
+        /// Opens one packaged Wii disc file as a read-only memory-backed stream loaded from the encrypted partition.
         static FileStream* OpenRead(const char* path);
 
     private:

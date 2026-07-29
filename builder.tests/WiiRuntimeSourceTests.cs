@@ -45,25 +45,26 @@ public sealed class WiiRuntimeSourceTests {
         Assert.Contains("static std::string GetPackagedStartupSceneId();", bootstrapHeaderSource, StringComparison.Ordinal);
         Assert.Contains("std::string WiiSceneBootstrap::StartupSceneId = \"Scenes/DemoDiscMainMenu.helen\";", bootstrapSource, StringComparison.Ordinal);
         Assert.Contains("bool WiiSceneBootstrap::InitializePackagedStorage()", bootstrapSource, StringComparison.Ordinal);
-        Assert.Contains("DVD_Init();", bootstrapSource, StringComparison.Ordinal);
-        Assert.Contains("DVD_MountAsync(", bootstrapSource, StringComparison.Ordinal);
-        Assert.Contains("DVD_GetDriveStatus()", bootstrapSource, StringComparison.Ordinal);
         Assert.Contains("DI_Init()", bootstrapSource, StringComparison.Ordinal);
-        Assert.Contains("DI_OpenPartition", bootstrapSource, StringComparison.Ordinal);
-        Assert.Contains("DI_OpenPartition(partitionOffset >> 2U)", bootstrapSource, StringComparison.Ordinal);
-        Assert.Contains("WiiDiscFileSystem::ConfigurePartitionDataOffset", bootstrapSource, StringComparison.Ordinal);
-        Assert.Contains("DVD_ReadAbsAsyncPrio", bootstrapSource, StringComparison.Ordinal);
-        Assert.Contains("0x40000U", bootstrapSource, StringComparison.Ordinal);
-        Assert.Contains("0x2B8U", bootstrapSource, StringComparison.Ordinal);
+        Assert.Contains("WiiDiscFileSystem::InitializeOpenedPartition();", bootstrapSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("DVD_Init", bootstrapSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("DVD_MountAsync", bootstrapSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("DVD_ReadAbsAsyncPrio", bootstrapSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("DI_OpenPartition", bootstrapSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("0x40000U", bootstrapSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("0x2B8U", bootstrapSource, StringComparison.Ordinal);
         Assert.Contains("std::string WiiSceneBootstrap::GetPackagedContentRootPath()", bootstrapSource, StringComparison.Ordinal);
         Assert.Contains("return \"dvd:/\";", bootstrapSource, StringComparison.Ordinal);
         Assert.DoesNotContain("return \".\";", bootstrapSource, StringComparison.Ordinal);
 
         string discFileSystemHeaderSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiDiscFileSystem.hpp"));
         string discFileSystemSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiDiscFileSystem.cpp"));
-        Assert.Contains("static void ConfigurePartitionDataOffset(uint32_t partitionDataOffset);", discFileSystemHeaderSource, StringComparison.Ordinal);
-        Assert.Contains("PartitionDataOffset = partitionDataOffset;", discFileSystemSource, StringComparison.Ordinal);
-        Assert.Contains("DI_Read(", discFileSystemSource, StringComparison.Ordinal);
+        Assert.Contains("static void InitializeOpenedPartition();", discFileSystemHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("OpenedPartitionInitialized = true;", discFileSystemSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("PartitionDataOffset", discFileSystemHeaderSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("PartitionDataOffset", discFileSystemSource, StringComparison.Ordinal);
+        Assert.Contains("const std::size_t wordOffset = currentOffset >> 2U;", discFileSystemSource, StringComparison.Ordinal);
+        Assert.Contains("DI_Read(alignedBuffer, static_cast<u32>(alignedLength), static_cast<u32>(wordOffset))", discFileSystemSource, StringComparison.Ordinal);
     }
 
     /// <summary>
