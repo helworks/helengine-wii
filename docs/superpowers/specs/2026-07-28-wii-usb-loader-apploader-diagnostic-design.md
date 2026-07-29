@@ -2,7 +2,7 @@
 
 ## Goal
 
-Determine whether the Wii U/vWii black-screen failure occurs while USB Loader GX reads the generated apploader/DOL/FST or after it transfers control to the Helengine executable. The diagnostic must preserve the loader's normal boot path and produce evidence on the SD card without requiring a USB Gecko.
+Determine whether the Wii U/vWii black-screen failure occurs while USB Loader GX reads the generated apploader/DOL/FST or after it transfers control to the Helengine executable. The diagnostic must preserve automatic IOS selection and produce filesystem evidence without requiring a USB Gecko.
 
 ## Current Evidence
 
@@ -28,14 +28,14 @@ Align generated reads and replace physical-drive startup in one build. This may 
 
 The USB Loader GX diagnostic build will make only two source changes:
 
-1. Enable the existing `DEBUG_TO_FILE` path in `source/gecko.c`, which appends loader diagnostics to `sd:/debug.txt`.
+1. Enable the existing `DEBUG_TO_FILE` path in `source/gecko.c`, which appends loader diagnostics to `sd:/debug.txt` and falls back to `usb1:/debug.txt` if the game IOS reload makes the SD mount unavailable.
 2. In `source/usbloader/apploader.c`, log the destination, requested length, partition-relative byte offset, and `WDVD_Read` return value for every request returned by `appldr_main`. If a read fails, return the error immediately instead of registering or flushing unread data.
 
 The diagnostic will also log the apploader header values, payload read result, callback completion, and final entrypoint when those values are available. These messages provide an unambiguous sequence even if the custom apploader's callback output is absent.
 
 ## Data Flow
 
-USB Loader GX opens the selected WBFS game partition, reads the apploader header and payload through `/dev/di`, invokes the generated apploader, and services each returned DOL/FST request through `WDVD_Read`. Every completed boundary is appended to `sd:/debug.txt`. If all requests succeed, the log records the final entrypoint before the loader performs its existing shutdown and jump.
+USB Loader GX opens the selected WBFS game partition, reads the apploader header and payload through `/dev/di`, invokes the generated apploader, and services each returned DOL/FST request through `WDVD_Read`. Every completed boundary is appended to `sd:/debug.txt` while SD is mounted or `usb1:/debug.txt` after an automatic game IOS transition. If all requests succeed, the log records the final entrypoint before the loader performs its existing shutdown and jump.
 
 ## Result Interpretation
 
@@ -53,7 +53,7 @@ The diagnostic must not continue after a failed DOL/FST read. Returning the actu
 
 Build the loader using its checked-in devkitPro/Docker build path. Preserve the stock loader artifact and give the diagnostic binary a distinct delivery directory or filename. The SD card deployment should replace only the Homebrew Channel loader executable needed for this test; the user's configuration and game WBFS remain unchanged.
 
-Before the hardware run, remove or rename any existing `sd:/debug.txt` so the resulting file contains one boot attempt. After the black-screen attempt, power back to the Homebrew Channel when possible and retrieve `sd:/debug.txt`.
+Before the hardware run, remove or rename existing `debug.txt` files from both the SD and USB roots so the resulting files contain one boot attempt. After the black-screen attempt, power back to the Homebrew Channel when possible and retrieve both files that were created.
 
 ## Validation
 

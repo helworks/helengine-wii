@@ -13,7 +13,7 @@
 - Do not change Helengine, the generated ISO/WBFS, cIOS settings, or runtime storage initialization.
 - Preserve the reference USB Loader GX checkout and edit an isolated worktree.
 - Limit source changes to `source/gecko.c` and `source/usbloader/apploader.c`.
-- Write diagnostics to `sd:/debug.txt` without USB Gecko hardware.
+- Write diagnostics to `sd:/debug.txt`, falling back to `usb1:/debug.txt` across automatic IOS reloads, without USB Gecko hardware.
 - Preserve successful boot behavior and return the real error after a failed disc read.
 - Keep existing user changes in `C:\dev\helworks\helengine-wii` untouched.
 
@@ -165,7 +165,7 @@ git -c safe.directory=C:/tmp/usbloadergx-apploader-diagnostic -C C:\tmp\usbloade
 
 **Files:**
 - Deploy: `C:\tmp\usbloadergx-apploader-diagnostic-output\boot.dol`
-- Retrieve: `sd:/debug.txt`
+- Retrieve: `sd:/debug.txt` and `usb1:/debug.txt`
 
 **Interfaces:**
 - Consumes: diagnostic loader and unchanged game WBFS.
@@ -173,7 +173,7 @@ git -c safe.directory=C:/tmp/usbloadergx-apploader-diagnostic -C C:\tmp\usbloade
 
 - [ ] **Step 1: Prepare the SD card**
 
-Back up the installed USB Loader GX `boot.dol`, install the diagnostic `boot.dol`, and remove or rename an existing `sd:/debug.txt`.
+Back up the installed USB Loader GX `boot.dol`, install the diagnostic `boot.dol`, and remove or rename existing `debug.txt` files from the SD and USB roots.
 
 - [ ] **Step 2: Run one boot**
 
@@ -181,6 +181,5 @@ Launch the loader from Homebrew Channel and start the unchanged game. After the 
 
 - [ ] **Step 3: Retrieve evidence**
 
-Copy `sd:/debug.txt` back unchanged. The last `[HAD]` record determines whether the next change belongs in generated apploader reads or Helengine startup.
-
+Copy both new `debug.txt` files back unchanged. The last `[HAD]` record determines whether the next change belongs in generated apploader reads or Helengine startup.
 
