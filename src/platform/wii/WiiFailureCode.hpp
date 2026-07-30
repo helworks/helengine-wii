@@ -68,100 +68,101 @@ namespace helengine::wii {
         /// The Wii raster renderer was submitting the native frame plan through GX.
         RasterSubmission = 0xC104U,
 
-        /// The scene manager was committing a queued operation at the generated frame boundary.
+        /// Pending scene-operation commit was entering, executing a queued operation, or completing at the generated frame boundary.
         SceneOperationCommit = 0xC110U,
 
-        /// The scene manager was resolving the content path for a requested scene.
+        /// Immediate scene loading had entered or was about to resolve the requested scene's content path.
         ScenePathResolution = 0xC111U,
 
-        /// The scene manager was locating or preparing the record that tracks a loaded scene.
+        /// Immediate scene loading had resolved the content path and was looking up the loaded-scene record or performing single-mode pre-load cleanup.
+        /// Cleanup includes disposing untracked roots, unloading existing scenes, flushing released textures, and resetting physics timing.
         SceneRecordLookup = 0xC112U,
 
-        /// The scene manager was beginning the requested scene content load.
+        /// Immediate scene loading was about to load the resolved scene content.
         SceneContentLoad = 0xC113U,
 
-        /// The scene manager was calling the service that materializes scene content.
+        /// The scene manager was about to call the scene-load service to materialize resolved scene content.
         SceneMaterializationCall = 0xC114U,
 
-        /// The scene materialization service had returned control to the scene manager.
+        /// The scene-load service had returned materialized scene content to the scene manager.
         SceneMaterializationReturn = 0xC115U,
 
-        /// The scene manager was preparing to track a newly materialized scene record.
+        /// The scene manager was about to track the newly materialized loaded-scene record.
         SceneRecordTrack = 0xC116U,
 
-        /// The scene manager had added a scene record to its ordered loaded-scene list.
+        /// The scene manager had inserted the newly materialized record into its ordered loaded-scene list.
         SceneRecordListInsertion = 0xC117U,
 
-        /// The scene manager had added a scene record to its lookup dictionary.
+        /// The scene manager had inserted the newly materialized record into its loaded-scene lookup dictionary.
         SceneRecordDictionaryInsertion = 0xC118U,
 
-        /// The scene manager was dispatching the scene-loaded event.
+        /// The scene manager was about to dispatch the scene-loaded event for the newly tracked scene.
         SceneLoadedEvent = 0xC119U,
 
-        /// The scene-loaded event dispatch had returned to generated core code.
+        /// The scene-loaded event dispatch had returned control to generated core code.
         SceneLoadedEventReturned = 0xC11AU,
 
-        /// Generated core code was about to release scene-loaded event arguments.
+        /// Generated core code was about to release the scene-loaded event arguments after dispatch.
         SceneLoadedEventArgsRelease = 0xC11BU,
 
-        /// Generated core code had released scene-loaded event arguments.
+        /// Generated core code had released the scene-loaded event arguments after dispatch.
         SceneLoadedEventArgsReleased = 0xC11CU,
 
-        /// Generated scene loading was releasing transition assets or completing cleanup.
+        /// Immediate scene loading had returned from the scene-loaded event or reached its end, or transition cleanup had released scene assets or committed the transition.
         SceneLoadCleanup = 0xC11DU,
 
-        /// The scene materialization service was beginning to reconstruct the authored scene graph.
+        /// Scene materialization had begun or was about to load the authored root entity.
         SceneMaterializationBegin = 0xC120U,
 
-        /// The scene materialization service was constructing an authored entity.
+        /// Scene materialization had begun constructing an authored entity.
         SceneEntityConstruction = 0xC121U,
 
-        /// The scene materialization service was deserializing an authored component with no more specific component mapping.
+        /// Scene materialization was preparing to deserialize or had begun deserializing an authored component with no more specific mapping.
         SceneComponentDeserialization = 0xC122U,
 
-        /// The scene materialization service was about to materialize an authored child entity.
+        /// Scene materialization was about to load an authored child entity.
         SceneChildEntity = 0xC123U,
 
-        /// The scene materialization service was completing an authored entity and attaching it to its parent scene graph.
+        /// Scene materialization had completed loading an authored entity after its components and children.
         SceneEntityCompletion = 0xC124U,
 
-        /// The scene materialization service had completed reconstruction of the authored scene graph.
+        /// Scene materialization had completed reconstruction of the entire authored scene graph.
         SceneMaterializationCompleted = 0xC125U,
 
-        /// The scene materialization service was deserializing a camera component.
+        /// Scene materialization was preparing to deserialize or had begun deserializing a camera component.
         CameraComponentDeserialization = 0xC130U,
 
-        /// The scene materialization service was deserializing a rounded-rectangle component.
+        /// Scene materialization was preparing to deserialize or had begun deserializing a rounded-rectangle component.
         RoundedRectComponentDeserialization = 0xC131U,
 
-        /// The scene materialization service was deserializing a viewport component.
+        /// Scene materialization was preparing to deserialize or had begun deserializing a viewport component.
         ViewportComponentDeserialization = 0xC132U,
 
-        /// The scene materialization service was deserializing a reference-canvas-fit component.
+        /// Scene materialization was preparing to deserialize or had begun deserializing a reference-canvas-fit component.
         ReferenceCanvasFitComponentDeserialization = 0xC133U,
 
-        /// The scene materialization service was deserializing the Helen of Code splash component.
+        /// Scene materialization was preparing to deserialize or had begun deserializing the Helen of Code splash component.
         SplashComponentDeserialization = 0xC134U,
 
-        /// The scene materialization service was deserializing a sprite component.
+        /// Scene materialization was preparing to deserialize or had begun deserializing a sprite component.
         SpriteComponentDeserialization = 0xC135U,
 
-        /// The scene manager was registering textures owned by a newly loaded scene.
+        /// The scene manager was about to register textures owned by the newly loaded scene.
         OwnedTextureRegistration = 0xC140U,
 
-        /// The scene manager was registering fonts owned by a newly loaded scene.
+        /// The scene manager was about to register fonts owned by the newly loaded scene.
         OwnedFontRegistration = 0xC141U,
 
-        /// The scene manager was registering audio assets owned by a newly loaded scene.
+        /// The scene manager was about to register audio assets owned by the newly loaded scene.
         OwnedAudioRegistration = 0xC142U,
 
-        /// The scene manager was registering models owned by a newly loaded scene.
+        /// The scene manager was about to register models owned by the newly loaded scene.
         OwnedModelRegistration = 0xC143U,
 
-        /// The scene manager was registering materials owned by a newly loaded scene.
+        /// The scene manager was about to register materials owned by the newly loaded scene.
         OwnedMaterialRegistration = 0xC144U,
 
-        /// The scene manager had completed registration of all assets owned by a newly loaded scene.
+        /// The scene manager had registered every owned asset category for the newly loaded scene.
         OwnedAssetRegistrationCompleted = 0xC145U,
 
         /// The generated core draw method had entered its frame setup boundary.
