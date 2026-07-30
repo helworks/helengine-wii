@@ -12,9 +12,9 @@
 #include <string>
 #include <vector>
 
-#include <di/di.h>
 #include <ogc/system.h>
 
+#include "platform/wii/WiiDiscInterface.hpp"
 #include "system/io/file-stream.hpp"
 
 namespace helengine::wii {
@@ -88,7 +88,7 @@ namespace helengine::wii {
             return true;
         }
 
-        /// Reads an arbitrary byte range from the opened Wii partition using the synchronous decrypted libogc DI API.
+        /// Reads an arbitrary byte range from the loader-opened Wii partition through its encrypted IOS interface.
         bool ReadDiscRange(void* destination, std::size_t offset, std::size_t length) {
             if (destination == nullptr) {
                 return false;
@@ -112,16 +112,16 @@ namespace helengine::wii {
 
                 std::memset(alignedBuffer, 0, alignedLength);
                 if (DiscReadLogCount < 8U) {
-                    SYS_Report("[Wii] DI_Read begin relative=%lu wordOffset=%lu copyLength=%lu alignedLength=%lu\n",
+                    SYS_Report("[Wii] IOS read begin relative=%lu wordOffset=%lu copyLength=%lu alignedLength=%lu\n",
                         static_cast<unsigned long>(currentOffset),
                         static_cast<unsigned long>(wordOffset),
                         static_cast<unsigned long>(chunkLength),
                         static_cast<unsigned long>(alignedLength));
                 }
 
-                const int readResult = DI_Read(alignedBuffer, static_cast<u32>(alignedLength), static_cast<u32>(wordOffset));
-                if (readResult < 0) {
-                    SYS_Report("[Wii] DI_Read failed offset=%lu wordOffset=%lu copyLength=%lu alignedLength=%lu result=%d\n",
+                const int readResult = WiiDiscInterface::ReadEncryptedPartition(alignedBuffer, alignedLength, currentOffset);
+                if (readResult != 1) {
+                    SYS_Report("[Wii] IOS read failed offset=%lu wordOffset=%lu copyLength=%lu alignedLength=%lu result=%d\n",
                         static_cast<unsigned long>(currentOffset),
                         static_cast<unsigned long>(wordOffset),
                         static_cast<unsigned long>(chunkLength),
@@ -134,7 +134,7 @@ namespace helengine::wii {
                 std::memcpy(destinationBytes, alignedBuffer, chunkLength);
                 free(alignedBuffer);
                 if (DiscReadLogCount < 8U) {
-                    SYS_Report("[Wii] DI_Read completed relative=%lu wordOffset=%lu copyLength=%lu alignedLength=%lu result=%d\n",
+                    SYS_Report("[Wii] IOS read completed relative=%lu wordOffset=%lu copyLength=%lu alignedLength=%lu result=%d\n",
                         static_cast<unsigned long>(currentOffset),
                         static_cast<unsigned long>(wordOffset),
                         static_cast<unsigned long>(chunkLength),

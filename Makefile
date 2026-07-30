@@ -84,6 +84,7 @@ GENERATED_BRIDGE_SOURCES := \
 	$(SOURCE_DIR)/platform/wii/WiiRuntimeMaterial.cpp \
 	$(SOURCE_DIR)/platform/wii/WiiRuntimeModel.cpp \
 	$(SOURCE_DIR)/platform/wii/WiiRuntimeTexture.cpp \
+	$(SOURCE_DIR)/platform/wii/WiiDiscInterface.cpp \
 	$(SOURCE_DIR)/platform/wii/WiiDiscFileSystem.cpp \
 	$(SOURCE_DIR)/platform/wii/WiiSceneBootstrap.cpp
 CPPFLAGS += -DHELENGINE_WII_HAS_GENERATED_CORE=1 -I$(HELENGINE_CORE_CPP_ROOT)
@@ -151,7 +152,6 @@ LDLIBS := \
 	-lbte \
 	-lfat \
 	-logc \
-	-ldi \
 	-ldb \
 	-lm
 

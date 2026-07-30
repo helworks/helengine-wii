@@ -2,11 +2,11 @@
 
 #include <cstddef>
 
-#include <di/di.h>
 #include <ogc/system.h>
 
 #include "RuntimeSceneCatalog.hpp"
 #include "RuntimeSceneCatalogEntry.hpp"
+#include "platform/wii/WiiDiscInterface.hpp"
 #include "platform/wii/WiiDiscFileSystem.hpp"
 #include "runtime/array.hpp"
 #include "runtime/native_exceptions.hpp"
@@ -56,9 +56,8 @@ namespace helengine::wii {
     /// Initializes access to the encrypted Wii partition already opened by the disc apploader or USB loader.
     bool WiiSceneBootstrap::InitializePackagedStorage() {
         SYS_Report("[Wii] InitializePackagedStorage begin.\n");
-        const int diInitResult = DI_Init();
-        SYS_Report("[Wii] DI_Init result: %d\n", diInitResult);
-        if (diInitResult < 0) {
+        if (!WiiDiscInterface::Initialize()) {
+            SYS_Report("[Wii] Could not open the cIOS disc device.\n");
             return false;
         }
 

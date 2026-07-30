@@ -45,7 +45,8 @@ public sealed class WiiRuntimeSourceTests {
         Assert.Contains("static std::string GetPackagedStartupSceneId();", bootstrapHeaderSource, StringComparison.Ordinal);
         Assert.Contains("std::string WiiSceneBootstrap::StartupSceneId = \"Scenes/DemoDiscMainMenu.helen\";", bootstrapSource, StringComparison.Ordinal);
         Assert.Contains("bool WiiSceneBootstrap::InitializePackagedStorage()", bootstrapSource, StringComparison.Ordinal);
-        Assert.Contains("DI_Init()", bootstrapSource, StringComparison.Ordinal);
+        Assert.Contains("WiiDiscInterface::Initialize()", bootstrapSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("DI_Init()", bootstrapSource, StringComparison.Ordinal);
         Assert.Contains("WiiDiscFileSystem::InitializeOpenedPartition();", bootstrapSource, StringComparison.Ordinal);
         Assert.DoesNotContain("DVD_Init", bootstrapSource, StringComparison.Ordinal);
         Assert.DoesNotContain("DVD_MountAsync", bootstrapSource, StringComparison.Ordinal);
@@ -64,7 +65,8 @@ public sealed class WiiRuntimeSourceTests {
         Assert.DoesNotContain("PartitionDataOffset", discFileSystemHeaderSource, StringComparison.Ordinal);
         Assert.DoesNotContain("PartitionDataOffset", discFileSystemSource, StringComparison.Ordinal);
         Assert.Contains("const std::size_t wordOffset = currentOffset >> 2U;", discFileSystemSource, StringComparison.Ordinal);
-        Assert.Contains("DI_Read(alignedBuffer, static_cast<u32>(alignedLength), static_cast<u32>(wordOffset))", discFileSystemSource, StringComparison.Ordinal);
+        Assert.Contains("WiiDiscInterface::ReadEncryptedPartition(alignedBuffer, alignedLength, currentOffset)", discFileSystemSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("DI_Read(", discFileSystemSource, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -678,7 +680,8 @@ public sealed class WiiRuntimeSourceTests {
         Assert.Contains("static bool CanHandlePath(const char* path);", discFileSystemHeaderSource, StringComparison.Ordinal);
         Assert.Contains("static bool Exists(const char* path);", discFileSystemHeaderSource, StringComparison.Ordinal);
         Assert.Contains("static FileStream* OpenRead(const char* path);", discFileSystemHeaderSource, StringComparison.Ordinal);
-        Assert.Contains("DI_Read(", discFileSystemSource, StringComparison.Ordinal);
+        Assert.Contains("WiiDiscInterface::ReadEncryptedPartition(", discFileSystemSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("DI_Read(", discFileSystemSource, StringComparison.Ordinal);
         Assert.Contains("<< 2U", discFileSystemSource, StringComparison.Ordinal);
         Assert.Contains("native-file-system-header", platformDefinitionFactorySource, StringComparison.Ordinal);
         Assert.Contains("WiiNativeFileSystemHeader = \"\\\"platform/wii/WiiDiscFileSystem.hpp\\\"\"", platformDefinitionFactorySource, StringComparison.Ordinal);
@@ -1337,9 +1340,45 @@ public sealed class WiiRuntimeSourceTests {
         Assert.Contains("const std::size_t wordOffset = currentOffset >> 2U;", source, StringComparison.Ordinal);
         Assert.Contains("const std::size_t alignedLength = Align32(chunkLength);", source, StringComparison.Ordinal);
         Assert.Contains("uint8_t* alignedBuffer = static_cast<uint8_t*>(memalign(32, alignedLength));", source, StringComparison.Ordinal);
-        Assert.Contains("const int readResult = DI_Read(alignedBuffer, static_cast<u32>(alignedLength), static_cast<u32>(wordOffset));", source, StringComparison.Ordinal);
+        Assert.Contains("const int readResult = WiiDiscInterface::ReadEncryptedPartition(alignedBuffer, alignedLength, currentOffset);", source, StringComparison.Ordinal);
+        Assert.Contains("if (readResult != 1) {", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("DI_Read(", source, StringComparison.Ordinal);
         Assert.Contains("std::memcpy(destinationBytes, alignedBuffer, chunkLength);", source, StringComparison.Ordinal);
         Assert.DoesNotContain("DVD_ReadPrio(", source, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ensures packaged Wii startup opens the cIOS disc device directly instead of accepting libdi's AHBPROT-gated false-success result.
+    /// </summary>
+    [Fact]
+    public void PackagedDiscInterface_UsesDirectIosDeviceWithoutAhbprotGate() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string interfaceHeaderSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiDiscInterface.hpp"));
+        string interfaceSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiDiscInterface.cpp"));
+        string bootstrapSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiSceneBootstrap.cpp"));
+        string makefileSource = File.ReadAllText(Path.Combine(repositoryRootPath, "Makefile"));
+
+        Assert.Contains("class WiiDiscInterface", interfaceHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("static bool Initialize();", interfaceHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("static int ReadEncryptedPartition(void* destination, std::size_t length, std::size_t partitionRelativeOffset);", interfaceHeaderSource, StringComparison.Ordinal);
+        Assert.Contains("static constexpr uint32_t IoctlDiRead = 0x71U;", interfaceSource, StringComparison.Ordinal);
+        Assert.Contains("IOS_Open(DevicePath, 0)", interfaceSource, StringComparison.Ordinal);
+        Assert.Contains("CommandBuffer[0] = IoctlDiRead << 24U;", interfaceSource, StringComparison.Ordinal);
+        Assert.Contains("CommandBuffer[1] = static_cast<uint32_t>(length);", interfaceSource, StringComparison.Ordinal);
+        Assert.Contains("CommandBuffer[2] = static_cast<uint32_t>(partitionRelativeOffset >> 2U);", interfaceSource, StringComparison.Ordinal);
+        Assert.Contains("if (FileDescriptor < 0) {", interfaceSource, StringComparison.Ordinal);
+        Assert.Contains("return -ENXIO;", interfaceSource, StringComparison.Ordinal);
+        Assert.Contains("(reinterpret_cast<uintptr_t>(destination) & 0x1FU) != 0U", interfaceSource, StringComparison.Ordinal);
+        Assert.Contains("(length & 0x1FU) != 0U", interfaceSource, StringComparison.Ordinal);
+        Assert.Contains("(partitionRelativeOffset & 0x3U) != 0U", interfaceSource, StringComparison.Ordinal);
+        Assert.Contains("return -EINVAL;", interfaceSource, StringComparison.Ordinal);
+        Assert.Contains("return IOS_Ioctl(", interfaceSource, StringComparison.Ordinal);
+        Assert.Contains("WiiDiscInterface::Initialize()", bootstrapSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("DI_Init()", bootstrapSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("DI_OpenPartition", interfaceSource, StringComparison.Ordinal);
+        Assert.Contains("$(SOURCE_DIR)/platform/wii/WiiDiscInterface.cpp", makefileSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("\t-ldi", makefileSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("AHBPROT", interfaceSource, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
