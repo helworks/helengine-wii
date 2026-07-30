@@ -123,7 +123,7 @@ namespace helengine::wii {
         /// Scene materialization was about to load an authored child entity.
         SceneChildEntity = 0xC123U,
 
-        /// Scene materialization had completed loading an authored entity after its components and children.
+        /// Scene materialization had completed loading an authored entity or was initializing the materialized hierarchy after the final entity completed.
         SceneEntityCompletion = 0xC124U,
 
         /// Scene materialization had completed reconstruction of the entire authored scene graph.
