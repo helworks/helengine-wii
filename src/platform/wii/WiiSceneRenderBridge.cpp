@@ -63,7 +63,7 @@ namespace helengine::wii {
 
         RenderFrameExtractionService extractor;
         RenderFrameExtractionResult* extraction = extractor.Extract(cameras, drawables, lights, capabilities);
-        RenderFrame* frame = (*extraction->get_Frames())[0];
+        RenderFrame* frame = extraction->get_Frames()->get_Item(0);
         float4 logicalViewport = CameraViewportResolver::ResolveViewport(camera->get_Viewport(), logicalWidth, logicalHeight);
         float4 physicalViewport = ResolvePhysicalViewport(logicalViewport, logicalWidth, logicalHeight, physicalWidth, physicalHeight);
         float4x4 view = BuildViewMatrix(camera);
@@ -76,8 +76,8 @@ namespace helengine::wii {
             cameras,
             drawables,
             lights,
-            frame->get_DrawableSubmissions(),
-            frame->get_LightSubmissions(),
+            new List<RenderFrameDrawableSubmission*>(frame->get_DrawableSubmissions()),
+            new List<RenderFrameLightSubmission*>(frame->get_LightSubmissions()),
             logicalViewport,
             physicalViewport,
             view,

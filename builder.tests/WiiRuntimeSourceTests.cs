@@ -5,6 +5,38 @@ namespace helengine.wii.builder.tests;
 /// </summary>
 public sealed class WiiRuntimeSourceTests {
     /// <summary>
+    /// Ensures the Wii scene bridge consumes generated read-only extraction collections through their generated accessors and borrows them in the frame plan.
+    /// </summary>
+    [Fact]
+    public void Packaged3D_SceneRenderBridgeAdaptsGeneratedReadOnlyExtractionCollections() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string sceneRenderBridgeSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiSceneRenderBridge.cpp"));
+
+        Assert.Contains("extraction->get_Frames()->get_Item(0)", sceneRenderBridgeSource, StringComparison.Ordinal);
+        Assert.Contains("new List<RenderFrameDrawableSubmission*>(frame->get_DrawableSubmissions())", sceneRenderBridgeSource, StringComparison.Ordinal);
+        Assert.Contains("new List<RenderFrameLightSubmission*>(frame->get_LightSubmissions())", sceneRenderBridgeSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("(*extraction->get_Frames())[0]", sceneRenderBridgeSource, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ensures Wii frame-plan cleanup uses the generated extraction result disposal contract instead of deleting read-only collection wrappers.
+    /// </summary>
+    [Fact]
+    public void Packaged3D_FramePlanDisposesGeneratedReadOnlyExtractionResult() {
+        string repositoryRootPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string framePlanSource = File.ReadAllText(Path.Combine(repositoryRootPath, "src", "platform", "wii", "WiiFramePlan.cpp"));
+
+        Assert.Contains("IReadOnlyList<RenderFrame*>* frames = extractionResult->get_Frames()", framePlanSource, StringComparison.Ordinal);
+        Assert.Contains("IReadOnlyList<RenderFrameDrawableSubmission*>* drawableSubmissions", framePlanSource, StringComparison.Ordinal);
+        Assert.Contains("extractionResult->Dispose();", framePlanSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("delete frames;", framePlanSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("delete drawableSubmissions;", framePlanSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("delete lightSubmissions;", framePlanSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("delete shadowCasterSubmissions;", framePlanSource, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
     /// Ensures the Wii runtime keeps a direct-DOL developer boot path instead of forcing packaged-disc startup for every emulator launch.
     /// </summary>
     [Fact]

@@ -13,20 +13,20 @@ namespace {
             return;
         }
 
-        List<RenderFrame*>* frames = extractionResult->get_Frames();
+        IReadOnlyList<RenderFrame*>* frames = extractionResult->get_Frames();
         if (frames != nullptr) {
             for (int32_t frameIndex = 0; frameIndex < frames->get_Count(); frameIndex++) {
-                RenderFrame* frame = (*frames)[frameIndex];
+                RenderFrame* frame = frames->get_Item(frameIndex);
                 if (frame == nullptr) {
                     continue;
                 }
 
                 const bool deleteSharedSubmissionItems = frameIndex == 0;
-                List<RenderFrameDrawableSubmission*>* drawableSubmissions = frame->get_DrawableSubmissions();
+                IReadOnlyList<RenderFrameDrawableSubmission*>* drawableSubmissions = frame->get_DrawableSubmissions();
                 if (drawableSubmissions != nullptr) {
                     if (deleteSharedSubmissionItems) {
                         for (int32_t submissionIndex = 0; submissionIndex < drawableSubmissions->get_Count(); submissionIndex++) {
-                            RenderFrameDrawableSubmission* drawableSubmission = (*drawableSubmissions)[submissionIndex];
+                            RenderFrameDrawableSubmission* drawableSubmission = drawableSubmissions->get_Item(submissionIndex);
                             if (drawableSubmission == nullptr) {
                                 continue;
                             }
@@ -34,53 +34,15 @@ namespace {
                             RenderFrameBatchingMetadata* batchingMetadata = drawableSubmission->get_BatchingMetadata();
                             if (batchingMetadata != nullptr) {
                                 delete batchingMetadata;
+                                drawableSubmission->BatchingMetadata = nullptr;
                             }
-
-                            delete drawableSubmission;
                         }
                     }
-
-                    delete drawableSubmissions;
                 }
-
-                List<RenderFrameLightSubmission*>* lightSubmissions = frame->get_LightSubmissions();
-                if (lightSubmissions != nullptr) {
-                    if (deleteSharedSubmissionItems) {
-                        for (int32_t submissionIndex = 0; submissionIndex < lightSubmissions->get_Count(); submissionIndex++) {
-                            RenderFrameLightSubmission* lightSubmission = (*lightSubmissions)[submissionIndex];
-                            if (lightSubmission == nullptr) {
-                                continue;
-                            }
-
-                            delete lightSubmission;
-                        }
-                    }
-
-                    delete lightSubmissions;
-                }
-
-                List<RenderFrameShadowCasterSubmission*>* shadowCasterSubmissions = frame->get_ShadowCasterSubmissions();
-                if (shadowCasterSubmissions != nullptr) {
-                    if (deleteSharedSubmissionItems) {
-                        for (int32_t submissionIndex = 0; submissionIndex < shadowCasterSubmissions->get_Count(); submissionIndex++) {
-                            RenderFrameShadowCasterSubmission* shadowCasterSubmission = (*shadowCasterSubmissions)[submissionIndex];
-                            if (shadowCasterSubmission == nullptr) {
-                                continue;
-                            }
-
-                            delete shadowCasterSubmission;
-                        }
-                    }
-
-                    delete shadowCasterSubmissions;
-                }
-
-                delete frame;
             }
-
-            delete frames;
         }
 
+        extractionResult->Dispose();
         delete extractionResult;
         extractionResult = nullptr;
     }

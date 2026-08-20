@@ -29,4 +29,18 @@ public sealed class WiiPlatformDefinitionFactoryTests {
         Assert.Equal("helengine::wii::WiiDiscFileSystem", nativeFileSystemTypeSetting.DefaultValue);
         Assert.Contains(PortableInputPreprocessorSymbolCatalog.MatrixAbiGxGameCubeWiiSymbol, definition.RuntimeGenerationContract.PortableInputPreprocessorSymbols);
     }
+
+    /// <summary>
+    /// Ensures the native Wii boot host receives the generated host filesystem source it references outside managed reachability analysis.
+    /// </summary>
+    [Fact]
+    public void Create_force_enables_host_file_system_runtime_feature() {
+        PlatformDefinition definition = WiiPlatformDefinitionFactory.Create();
+        PlatformCodegenProfileDefinition codegenProfile = Assert.Single(definition.CodegenProfiles);
+        PlatformSettingDefinition enabledFeatures = Assert.Single(
+            codegenProfile.Settings,
+            setting => setting.SettingId == PlatformCodegenSettingIds.EnabledFeatures);
+
+        Assert.Equal("host_file_system", enabledFeatures.DefaultValue);
+    }
 }

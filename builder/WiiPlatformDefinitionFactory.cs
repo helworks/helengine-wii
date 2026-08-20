@@ -274,6 +274,13 @@ public static class WiiPlatformDefinitionFactory {
                             true,
                             []),
                         new PlatformSettingDefinition(
+                            PlatformCodegenSettingIds.EnabledFeatures,
+                            "Enabled Runtime Features",
+                            PlatformSettingKind.Text,
+                            "host_file_system",
+                            true,
+                            []),
+                        new PlatformSettingDefinition(
                             "generated-math-convention",
                             "Generated Math Convention",
                             PlatformSettingKind.Text,
@@ -306,6 +313,13 @@ public static class WiiPlatformDefinitionFactory {
                             "Native File System Type",
                             PlatformSettingKind.Text,
                             WiiNativeFileSystemType,
+                            true,
+                            []),
+                        new PlatformSettingDefinition(
+                            PlatformCodegenSettingIds.EnabledFeatures,
+                            "Enabled Features",
+                            PlatformSettingKind.Text,
+                            "host_file_system",
                             true,
                             [])
                     ])
