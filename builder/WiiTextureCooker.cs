@@ -15,9 +15,10 @@ public sealed class WiiTextureCooker {
             throw new ArgumentNullException(nameof(sourceTexture));
         } else if (settings == null) {
             throw new ArgumentNullException(nameof(settings));
-        } else if (!string.Equals(settings.ColorFormatId, TextureAssetColorFormat.GxRgb5A3.ToString(), StringComparison.Ordinal)) {
-            throw new InvalidOperationException($"Wii texture cooking currently supports only {TextureAssetColorFormat.GxRgb5A3}.");
         }
+
+        // GxRgb5A3 is the only Wii-native cook path; settings that request another format crush onto it
+        // instead of failing the whole platform build over a per-texture format id.
 
         TextureAsset workingTexture = CloneTextureAsset(sourceTexture);
         if (workingTexture.Width == 0 || workingTexture.Height == 0) {
