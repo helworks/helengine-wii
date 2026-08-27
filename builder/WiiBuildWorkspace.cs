@@ -60,7 +60,7 @@ public static class WiiBuildWorkspace {
         ResetDirectory(paths.StagingRootPath);
         Directory.CreateDirectory(paths.StagingRootPath);
         WritePhaseMarker(phaseMarkerPath, "platform cook work items begin");
-        ExecutePlatformCookWorkItems(request.Manifest.PlatformCookWorkItems ?? [], paths.StagingRootPath);
+        ExecutePlatformCookWorkItems(request.Manifest.PlatformCookWorkItems, paths.StagingRootPath);
         WritePhaseMarker(phaseMarkerPath, "platform cook work items completed");
         WritePhaseMarker(phaseMarkerPath, "stage cooked artifacts begin");
         StageCookedArtifacts(request, paths.StagingRootPath, progressReporter, diagnosticReporter, diagnostics, cancellationToken);
