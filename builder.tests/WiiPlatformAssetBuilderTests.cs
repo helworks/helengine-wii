@@ -59,6 +59,6 @@ public sealed class WiiPlatformAssetBuilderTests {
 
         Assert.NotNull(result);
         Assert.NotEmpty(result.CookedMaterialBytes);
-        Assert.Empty(result.ReferencedShaderAssetIds);
+        Assert.Empty(result.ReferencedShaderDependencies);
     }
 }
