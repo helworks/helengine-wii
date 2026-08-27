@@ -56,7 +56,9 @@ public static class Program {
                 Array.Empty<PlatformBuildArtifact>(),
                 Array.Empty<PlatformBuildCodeModule>(),
                 Array.Empty<PlatformArtifactPlacement>(),
-                new PlatformContainerWritePlan(string.Empty, Array.Empty<PlatformContainerArtifact>()));
+                new PlatformContainerWritePlan(string.Empty, Array.Empty<PlatformContainerArtifact>()),
+                Array.Empty<PlatformCookWorkItem>(),
+                PlatformBuildRuntimeFeatureManifest.Empty);
             new WiiRuntimeSceneManifestWriter().Write(generatedCoreRootPath, manifest);
             Console.WriteLine(Path.Combine(generatedCoreRootPath, "runtime", "wii_runtime_scene_manifest.hpp"));
             return 0;
