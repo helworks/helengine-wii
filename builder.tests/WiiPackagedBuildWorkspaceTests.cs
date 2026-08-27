@@ -62,7 +62,9 @@ public sealed class WiiPackagedBuildWorkspaceTests {
                 ],
                 Array.Empty<PlatformBuildCodeModule>(),
                 Array.Empty<PlatformArtifactPlacement>(),
-                new PlatformContainerWritePlan("wii-disc-layout", Array.Empty<PlatformContainerArtifact>()));
+                new PlatformContainerWritePlan("wii-disc-layout", Array.Empty<PlatformContainerArtifact>()),
+                Array.Empty<PlatformCookWorkItem>(),
+                PlatformBuildRuntimeFeatureManifest.Empty);
 
             PlatformBuildRequest request = new(
                 manifest,
@@ -180,7 +182,9 @@ public sealed class WiiPackagedBuildWorkspaceTests {
                 ],
                 Array.Empty<PlatformBuildCodeModule>(),
                 Array.Empty<PlatformArtifactPlacement>(),
-                new PlatformContainerWritePlan("wii-disc-layout", Array.Empty<PlatformContainerArtifact>()));
+                new PlatformContainerWritePlan("wii-disc-layout", Array.Empty<PlatformContainerArtifact>()),
+                Array.Empty<PlatformCookWorkItem>(),
+                PlatformBuildRuntimeFeatureManifest.Empty);
 
             PlatformBuildRequest request = new(
                 manifest,

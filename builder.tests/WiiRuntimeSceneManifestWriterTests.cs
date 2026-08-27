@@ -34,7 +34,9 @@ public sealed class WiiRuntimeSceneManifestWriterTests {
             Array.Empty<PlatformBuildArtifact>(),
             Array.Empty<PlatformBuildCodeModule>(),
             Array.Empty<PlatformArtifactPlacement>(),
-            new PlatformContainerWritePlan("wii-runtime-layout", Array.Empty<PlatformContainerArtifact>()));
+            new PlatformContainerWritePlan("wii-runtime-layout", Array.Empty<PlatformContainerArtifact>()),
+            Array.Empty<PlatformCookWorkItem>(),
+            PlatformBuildRuntimeFeatureManifest.Empty);
 
         try {
             WiiRuntimeSceneManifestWriter writer = new();
