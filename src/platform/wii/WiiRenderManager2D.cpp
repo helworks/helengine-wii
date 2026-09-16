@@ -559,6 +559,7 @@ namespace helengine::wii {
             sourceRect.Z * logicalWidth / nativeWidth,
             sourceRect.W * logicalHeight / nativeHeight);
 
+        GX_InitTexObjWrapMode(texture->GetNativeTextureObject(), GX_CLAMP, GX_CLAMP);
         GX_LoadTexObj(texture->GetNativeTextureObject(), GX_TEXMAP0);
         GX_Begin(GX_QUADS, GX_VTXFMT0, 4);
         GX_Position3f32(x, y, 0.0f);

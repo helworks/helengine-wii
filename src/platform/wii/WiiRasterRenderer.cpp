@@ -1019,6 +1019,7 @@ namespace helengine::wii {
 
         const bool useTexturedBranch = boundTexture != nullptr;
         if (useTexturedBranch) {
+            GX_InitTexObjWrapMode(boundTexture->GetNativeTextureObject(), GX_REPEAT, GX_REPEAT);
             GX_LoadTexObj(boundTexture->GetNativeTextureObject(), GX_TEXMAP0);
         }
 
