@@ -328,6 +328,13 @@ public static class WiiPlatformDefinitionFactory {
                             PlatformSettingKind.Text,
                             "host_file_system",
                             true,
+                            []),
+                        new PlatformSettingDefinition(
+                            "codegen-use-rtti",
+                            "Use Compiler RTTI",
+                            PlatformSettingKind.Boolean,
+                            "true",
+                            true,
                             [])
                     ])
             ],
