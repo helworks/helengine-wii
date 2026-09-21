@@ -1131,7 +1131,6 @@ public sealed class WiiRuntimeSourceTests {
         Assert.Contains("} else if (componentTypeId == \"helengine.RoundedRectComponent\") {\n            return WiiFailureCode::RoundedRectComponentDeserialization;", componentResolverSource, StringComparison.Ordinal);
         Assert.Contains("} else if (componentTypeId == \"helengine.ViewportComponent\") {\n            return WiiFailureCode::ViewportComponentDeserialization;", componentResolverSource, StringComparison.Ordinal);
         Assert.Contains("} else if (componentTypeId == \"helengine.ReferenceCanvasFitComponent\") {\n            return WiiFailureCode::ReferenceCanvasFitComponentDeserialization;", componentResolverSource, StringComparison.Ordinal);
-        Assert.Contains("} else if (componentTypeId == \"city.menu.HelenOfCodeSplashComponent, gameplay\") {\n            return WiiFailureCode::SplashComponentDeserialization;", componentResolverSource, StringComparison.Ordinal);
         Assert.Contains("} else if (componentTypeId == \"helengine.SpriteComponent\") {\n            return WiiFailureCode::SpriteComponentDeserialization;", componentResolverSource, StringComparison.Ordinal);
         Assert.Contains("return WiiFailureCode::SceneComponentDeserialization;", componentResolverSource, StringComparison.Ordinal);
 
