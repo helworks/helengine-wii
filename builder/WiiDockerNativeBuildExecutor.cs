@@ -16,6 +16,7 @@ public sealed class WiiDockerNativeBuildExecutor : IWiiNativeBuildExecutor {
         if (paths == null) {
             throw new ArgumentNullException(nameof(paths));
         }
+        Directory.CreateDirectory(paths.NativeObjectCacheRootPath);
 
         ProcessStartInfo startInfo = CreateStartInfo(paths);
 
@@ -30,8 +31,8 @@ public sealed class WiiDockerNativeBuildExecutor : IWiiNativeBuildExecutor {
                 + result.StandardError);
         }
 
-        string builtDolPath = Path.Combine(paths.RepositoryRootPath, "build", "helengine_wii.dol");
-        string builtApploaderTemplatePath = Path.Combine(paths.RepositoryRootPath, "build", WiiNativeApploaderTemplatePathResolver.FileName);
+        string builtDolPath = Path.Combine(paths.NativeObjectCacheRootPath, "helengine_wii.dol");
+        string builtApploaderTemplatePath = Path.Combine(paths.NativeObjectCacheRootPath, WiiNativeApploaderTemplatePathResolver.FileName);
         if (!File.Exists(builtDolPath)) {
             throw new FileNotFoundException("The packaged native Wii DOL was not produced by the Docker build.", builtDolPath);
         } else if (!File.Exists(builtApploaderTemplatePath)) {
@@ -68,6 +69,8 @@ public sealed class WiiDockerNativeBuildExecutor : IWiiNativeBuildExecutor {
         startInfo.ArgumentList.Add("--rm");
         startInfo.ArgumentList.Add("-v");
         startInfo.ArgumentList.Add(paths.RepositoryRootPath + ":/workspace");
+        startInfo.ArgumentList.Add("-v");
+        startInfo.ArgumentList.Add(paths.NativeObjectCacheRootPath + ":/native-build");
         if (!IsPathUnderRoot(paths.GeneratedCoreRootPath, paths.RepositoryRootPath)) {
             generatedCoreContainerPath = "/helengine-generated-core";
             startInfo.ArgumentList.Add("-v");
@@ -83,7 +86,7 @@ public sealed class WiiDockerNativeBuildExecutor : IWiiNativeBuildExecutor {
         startInfo.ArgumentList.Add("helengine-wii");
         startInfo.ArgumentList.Add("sh");
         startInfo.ArgumentList.Add("-lc");
-        startInfo.ArgumentList.Add("set -e; make clean && make");
+        startInfo.ArgumentList.Add("set -e; make BUILD_DIR=/native-build");
         return startInfo;
     }
 

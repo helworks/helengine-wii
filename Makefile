@@ -115,7 +115,9 @@ CXXFLAGS := \
 	-fpermissive \
 	$(MACHDEP) \
 	-ffunction-sections \
-	-fdata-sections
+	-fdata-sections \
+	-MMD \
+	-MP
 
 APPLOADER_CXXFLAGS := \
 	-std=gnu++20 \
@@ -132,6 +134,8 @@ APPLOADER_CXXFLAGS := \
 	-fno-use-cxa-atexit \
 	-ffunction-sections \
 	-fdata-sections \
+	-MMD \
+	-MP \
 	-msdata=none
 
 LDFLAGS := \
@@ -156,6 +160,16 @@ LDLIBS := \
 	-lm
 
 .PHONY: all clean
+
+DEPFILES := $(OBJECTS:.o=.d) $(APPLOADER_OBJECT:.o=.d)
+NATIVE_BUILD_CONFIG := $(BUILD_DIR)/.native-build-config
+.PHONY: FORCE_NATIVE_BUILD_CONFIG
+FORCE_NATIVE_BUILD_CONFIG:
+$(NATIVE_BUILD_CONFIG): FORCE_NATIVE_BUILD_CONFIG
+	@mkdir -p $(dir $@)
+	@printf '%s\n' '$(CXX) $(shell $(CXX) --version | head -n 1) $(LD) $(shell $(LD) --version | head -n 1) $(CPPFLAGS) $(CXXFLAGS) $(APPLOADER_CXXFLAGS) $(LDFLAGS) $(APPLOADER_LDFLAGS) $(LDLIBS) $(HELENGINE_WII_BOOT_MODE) $(HELENGINE_WII_BATCH_VERIFY_FRAME_LIMIT)' > $@.tmp
+	@if ! cmp -s $@.tmp $@; then mv $@.tmp $@; else rm $@.tmp; fi
+$(OBJECTS) $(APPLOADER_OBJECT) $(TARGET_ELF): $(NATIVE_BUILD_CONFIG)
 
 all: $(TARGET_DOL) $(APPLOADER_TEMPLATE)
 
@@ -187,3 +201,5 @@ $(BUILD_DIR)/generated/$(GENERATED_CORE_TRANSLATION_UNIT:.cpp=.o): $(GENERATED_C
 
 clean:
 	@rm -rf $(BUILD_DIR)
+
+-include $(DEPFILES)

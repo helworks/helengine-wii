@@ -32,7 +32,8 @@ public sealed class WiiDockerNativeBuildExecutorTests {
         Assert.Equal("docker", startInfo.FileName);
         Assert.Contains("sh", startInfo.ArgumentList);
         Assert.Contains("-lc", startInfo.ArgumentList);
-        Assert.Contains("set -e; make clean && make", startInfo.ArgumentList);
+        Assert.Contains("set -e; make BUILD_DIR=/native-build", startInfo.ArgumentList);
+        Assert.Contains(startInfo.ArgumentList, argument => argument.Contains(":/native-build", StringComparison.Ordinal));
     }
 
     /// <summary>

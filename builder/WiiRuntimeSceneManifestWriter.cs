@@ -22,8 +22,21 @@ public sealed class WiiRuntimeSceneManifestWriter {
         string runtimeRootPath = Path.Combine(generatedCoreRootPath, "runtime");
         Directory.CreateDirectory(runtimeRootPath);
 
-        File.WriteAllText(Path.Combine(runtimeRootPath, "wii_runtime_scene_manifest.hpp"), BuildHeaderContents());
-        File.WriteAllText(Path.Combine(runtimeRootPath, "wii_runtime_scene_manifest.inl"), BuildInlineContents(manifest));
+        WriteTextWhenChanged(Path.Combine(runtimeRootPath, "wii_runtime_scene_manifest.hpp"), BuildHeaderContents());
+        WriteTextWhenChanged(Path.Combine(runtimeRootPath, "wii_runtime_scene_manifest.inl"), BuildInlineContents(manifest));
+    }
+
+    /// <summary>
+    /// Writes one generated manifest file only when its contents differ from the stable cached file.
+    /// </summary>
+    /// <param name="filePath">Generated manifest destination.</param>
+    /// <param name="contents">Required generated manifest contents.</param>
+    static void WriteTextWhenChanged(string filePath, string contents) {
+        if (File.Exists(filePath) && string.Equals(File.ReadAllText(filePath), contents, StringComparison.Ordinal)) {
+            return;
+        }
+
+        File.WriteAllText(filePath, contents);
     }
 
     /// <summary>
