@@ -25,57 +25,69 @@ public sealed class WiiPlatformCookWorkItemExecutor {
         TextureCooker = new WiiTextureCooker();
     }
 
-    /// <summary>
-    /// Executes the supplied Wii platform cook work items into the staging root.
-    /// </summary>
-    /// <param name="workItems">Work items emitted by the editor build graph.</param>
-    /// <param name="projectRootPath">Project root used to resolve source asset paths.</param>
-    /// <param name="stagingRootPath">Staging root that receives cooked platform-owned outputs.</param>
+    /// <summary>Prepares the entire texture batch before publishing any output in the staging root.</summary>
     public void Execute(PlatformCookWorkItem[] workItems, string projectRootPath, string stagingRootPath) {
-        if (workItems == null) {
-            throw new ArgumentNullException(nameof(workItems));
-        } else if (string.IsNullOrWhiteSpace(projectRootPath)) {
-            throw new ArgumentException("Project root path must be provided.", nameof(projectRootPath));
-        } else if (string.IsNullOrWhiteSpace(stagingRootPath)) {
-            throw new ArgumentException("Staging root path must be provided.", nameof(stagingRootPath));
-        }
+        IReadOnlyList<WiiTextureCookWorkPlan> plans = Prepare(workItems, [], projectRootPath, stagingRootPath, CancellationToken.None);
+        Publish(plans, CancellationToken.None);
+    }
 
-        for (int index = 0; index < workItems.Length; index++) {
-            PlatformCookWorkItem workItem = workItems[index] ?? throw new InvalidOperationException("Platform cook work items must not contain null entries.");
-            if (string.Equals(workItem.SourceAssetKind, "texture", StringComparison.OrdinalIgnoreCase)) {
-                ExecuteTextureWorkItem(workItem, projectRootPath, stagingRootPath);
-            } else if (string.Equals(workItem.SourceAssetKind, "font-atlas-texture", StringComparison.OrdinalIgnoreCase)) {
-                ExecuteFontAtlasTextureWorkItem(workItem, projectRootPath, stagingRootPath);
-            } else {
-                throw new InvalidOperationException($"Wii builder does not support platform cook work item kind '{workItem.SourceAssetKind}'.");
+    /// <summary>Validates all contracts and disc paths, then decodes and cooks every source without changing staged outputs.</summary>
+    internal IReadOnlyList<WiiTextureCookWorkPlan> Prepare(
+        PlatformCookWorkItem[] workItems, PlatformBuildArtifact[] artifacts, string projectRootPath, string stagingRootPath, CancellationToken cancellationToken) {
+        ArgumentNullException.ThrowIfNull(workItems);
+        ArgumentNullException.ThrowIfNull(artifacts);
+        if (string.IsNullOrWhiteSpace(projectRootPath)) throw new ArgumentException("Project root is required.", nameof(projectRootPath));
+        if (string.IsNullOrWhiteSpace(stagingRootPath)) throw new ArgumentException("Staging root is required.", nameof(stagingRootPath));
+        cancellationToken.ThrowIfCancellationRequested();
+        WiiTextureCookPath.ValidateRoot(stagingRootPath);
+        HashSet<string> reserved = new(StringComparer.OrdinalIgnoreCase);
+        foreach (PlatformBuildArtifact artifact in artifacts) {
+            WiiTextureCookPath.Reserve(reserved, artifact.RelativePath);
+            WiiTextureCookPath.Resolve(stagingRootPath, artifact.RelativePath);
+        }
+        HashSet<string> sources = new(StringComparer.OrdinalIgnoreCase);
+        foreach (PlatformCookWorkItem item in workItems) {
+            if (item == null) throw new InvalidOperationException("Wii cook work items cannot be null.");
+            sources.Add(ResolveSourceAssetPath(projectRootPath, item.SourceAssetPath));
+        }
+        List<WiiTextureCookWorkPlan> plans = new(workItems.Length);
+        foreach (PlatformCookWorkItem item in workItems) {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!string.Equals(item.TargetPlatformId, "wii", StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(item.TargetArtifactKind, "runtime-texture", StringComparison.OrdinalIgnoreCase) ||
+                (!string.Equals(item.SourceAssetKind, "texture", StringComparison.OrdinalIgnoreCase) && !string.Equals(item.SourceAssetKind, "font-atlas-texture", StringComparison.OrdinalIgnoreCase))) {
+                throw new InvalidOperationException($"Unsupported Wii cook contract '{item.WorkItemId}'.");
             }
+            WiiTextureCookSettings settings = WiiTextureCookSettings.Parse(item.SerializedPlatformSettings);
+            string relative = WiiTextureCookPath.Normalize(item.OutputRelativePath);
+            WiiTextureCookPath.Reserve(reserved, relative);
+            string destination = WiiTextureCookPath.Resolve(stagingRootPath, relative);
+            string source = ResolveSourceAssetPath(projectRootPath, item.SourceAssetPath);
+            if (source.StartsWith(Path.TrimEndingDirectorySeparator(Path.GetFullPath(stagingRootPath)) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Wii source cannot reside in the staging tree being replaced.");
+            if (sources.Contains(destination)) throw new InvalidOperationException("Wii cook output would replace a source.");
+            if (!File.Exists(source)) throw new FileNotFoundException("Wii cook source was not found.", source);
+            plans.Add(new WiiTextureCookWorkPlan { WorkItem = item, Settings = settings, SourcePath = source, DestinationPath = destination, StagingRootPath = stagingRootPath });
         }
+        foreach (WiiTextureCookWorkPlan plan in plans) {
+            cancellationToken.ThrowIfCancellationRequested();
+            using TextureAsset source = LoadSourceTexture(plan.WorkItem, projectRootPath);
+            using TextureAsset cooked = TextureCooker.CookTexture(source, plan.Settings);
+            cooked.Id = plan.WorkItem.OutputLogicalArtifactId;
+            cooked.RuntimeAssetId = RuntimeAssetIdGenerator.Generate(cooked.Id);
+            plan.Payload = FilesAssetSerializer.SerializeToBytes(cooked);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return plans;
     }
 
-    /// <summary>
-    /// Executes one builder-owned texture work item into the staging root.
-    /// </summary>
-    /// <param name="workItem">Texture work item emitted by the editor build graph.</param>
-    /// <param name="projectRootPath">Project root used to resolve the source texture asset.</param>
-    /// <param name="stagingRootPath">Staging root that receives the cooked texture asset.</param>
-    void ExecuteTextureWorkItem(PlatformCookWorkItem workItem, string projectRootPath, string stagingRootPath) {
-        TextureAsset sourceTexture = LoadSourceTexture(workItem, projectRootPath);
-        WiiTextureCookSettings settings = WiiTextureCookSettings.Parse(workItem.SerializedPlatformSettings);
-        TextureAsset cookedTexture = TextureCooker.CookTexture(sourceTexture, settings);
-        WriteTextureAsset(Path.Combine(stagingRootPath, NormalizePath(workItem.OutputRelativePath)), cookedTexture);
-    }
-
-    /// <summary>
-    /// Executes one builder-owned font-atlas texture work item into the staging root.
-    /// </summary>
-    /// <param name="workItem">Font-atlas work item emitted by the editor build graph.</param>
-    /// <param name="projectRootPath">Project root used to resolve the generated atlas texture asset.</param>
-    /// <param name="stagingRootPath">Staging root that receives the cooked texture asset.</param>
-    void ExecuteFontAtlasTextureWorkItem(PlatformCookWorkItem workItem, string projectRootPath, string stagingRootPath) {
-        WiiTextureCookSettings settings = WiiTextureCookSettings.Parse(workItem.SerializedPlatformSettings);
-        TextureAsset sourceTexture = LoadSourceTexture(workItem, projectRootPath);
-        TextureAsset cookedTexture = TextureCooker.CookTexture(sourceTexture, settings);
-        WriteTextureAsset(Path.Combine(stagingRootPath, NormalizePath(workItem.OutputRelativePath)), cookedTexture);
+    /// <summary>Rechecks contained destinations and writes only a fully prepared texture batch.</summary>
+    internal void Publish(IReadOnlyList<WiiTextureCookWorkPlan> plans, CancellationToken cancellationToken) {
+        cancellationToken.ThrowIfCancellationRequested();
+        foreach (WiiTextureCookWorkPlan plan in plans) WiiTextureCookPath.Resolve(plan.StagingRootPath, plan.WorkItem.OutputRelativePath);
+        foreach (WiiTextureCookWorkPlan plan in plans) {
+            Directory.CreateDirectory(Path.GetDirectoryName(plan.DestinationPath));
+            File.WriteAllBytes(plan.DestinationPath, plan.Payload);
+        }
     }
 
     /// <summary>
@@ -92,6 +104,12 @@ public sealed class WiiPlatformCookWorkItemExecutor {
         }
 
         string sourcePath = ResolveSourceAssetPath(projectRootPath, workItem.SourceAssetPath);
+        if (string.Equals(workItem.SourceAssetKind, "font-atlas-texture", StringComparison.OrdinalIgnoreCase) && Path.GetExtension(sourcePath).Equals(".hefont", StringComparison.OrdinalIgnoreCase)) {
+            using FileStream fontStream = File.OpenRead(sourcePath);
+            FontAsset font = FilesFontAssetBinarySerializer.Deserialize(fontStream);
+            if (font.SourceTextureAsset == null) throw new InvalidOperationException("Wii font cook source has no embedded atlas.");
+            return font.SourceTextureAsset;
+        }
         if (TryReadTextureAsset(sourcePath, out TextureAsset textureAsset)) {
             return textureAsset;
         }
@@ -174,6 +192,7 @@ public sealed class WiiPlatformCookWorkItemExecutor {
 
         string extension = Path.GetExtension(sourcePath);
         if (!string.Equals(extension, ".hasset", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(extension, ".heasset", StringComparison.OrdinalIgnoreCase)
             && !string.Equals(extension, ".hetex", StringComparison.OrdinalIgnoreCase)) {
             return false;
         }
@@ -468,12 +487,10 @@ public sealed class WiiPlatformCookWorkItemExecutor {
             throw new ArgumentException("Source asset path must be provided.", nameof(sourceAssetPath));
         }
 
-        string normalizedSourcePath = NormalizePath(sourceAssetPath);
-        if (Path.IsPathRooted(normalizedSourcePath)) {
-            return Path.GetFullPath(normalizedSourcePath);
+        if (Path.IsPathRooted(sourceAssetPath)) {
+            return Path.GetFullPath(sourceAssetPath);
         }
-
-        return Path.GetFullPath(Path.Combine(projectRootPath, "assets", normalizedSourcePath));
+        return WiiTextureCookPath.Resolve(Path.Combine(projectRootPath, "assets"), sourceAssetPath);
     }
 
     /// <summary>

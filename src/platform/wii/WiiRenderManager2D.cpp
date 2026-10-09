@@ -42,6 +42,7 @@ namespace helengine::wii {
 
     /// Releases reusable generated command-list helper state owned by the Wii 2D render bridge.
     WiiRenderManager2D::~WiiRenderManager2D() {
+        FlushReleasedTextures();
         if (CommandListBuilder != nullptr) {
             CommandListBuilder->Dispose();
             delete CommandListBuilder;
@@ -63,7 +64,12 @@ namespace helengine::wii {
             data->Colors,
             data->PaletteColors);
         WiiRuntimeTexture* runtimeTexture = new WiiRuntimeTexture();
-        runtimeTexture->LoadFromRaw(data);
+        try {
+            runtimeTexture->LoadFromRaw(data);
+        } catch (...) {
+            delete runtimeTexture;
+            throw;
+        }
         SYS_Report("[Wii] BuildTextureFromRaw completed.\n");
         return runtimeTexture;
     }
@@ -112,8 +118,11 @@ namespace helengine::wii {
             throw new ArgumentNullException("texture");
         }
 
+        if (texture->get_IsEngineOwned()) return;
         texture->Dispose();
-        delete texture;
+        if (std::find(ReleasedTextures.begin(), ReleasedTextures.end(), texture) == ReleasedTextures.end()) {
+            ReleasedTextures.push_back(texture);
+        }
     }
 
     /// Releases one font asset.
@@ -122,6 +131,8 @@ namespace helengine::wii {
             throw new ArgumentNullException("font");
         }
 
+        RuntimeTexture* texture = font->get_Texture();
+        if (texture != nullptr) ReleaseTexture(texture);
         font->Dispose();
         delete font;
     }
@@ -177,6 +188,22 @@ namespace helengine::wii {
 
     /// Clears deferred release state after an engine frame.
     void WiiRenderManager2D::FlushReleasedTextures() {
+        if (ReleasedTextures.empty()) return;
+        // Runtime textures retain main-memory tiles and TLUTs referenced by GX's command stream.
+        GX_DrawDone();
+        for (RuntimeTexture* texture : ReleasedTextures) delete static_cast<WiiRuntimeTexture*>(texture);
+        ReleasedTextures.clear();
+    }
+
+    /// Validates the backend texture type and forbids mutation after it has entered deferred GPU retirement.
+    void WiiRenderManager2D::UpdateTextureRegionCore(RuntimeTexture* texture, int32_t x, int32_t y,
+        int32_t width, int32_t height, Array<uint8_t>* rgba8, int32_t sourceRowPitch) {
+        if (texture == nullptr || rgba8 == nullptr) throw new ArgumentNullException("texture region");
+        WiiRuntimeTexture* native = he_cpp_try_cast<WiiRuntimeTexture>(texture);
+        if (native == nullptr || std::find(ReleasedTextures.begin(), ReleasedTextures.end(), texture) != ReleasedTextures.end()) {
+            throw new InvalidOperationException("Wii texture updates require a live Wii runtime texture.");
+        }
+        native->UpdateRegionFromRgba8(x, y, width, height, rgba8, sourceRowPitch);
     }
 
     /// Clears previously captured 2D draw requests before the next engine frame begins.
@@ -560,7 +587,7 @@ namespace helengine::wii {
             sourceRect.W * logicalHeight / nativeHeight);
 
         GX_InitTexObjWrapMode(texture->GetNativeTextureObject(), GX_CLAMP, GX_CLAMP);
-        GX_LoadTexObj(texture->GetNativeTextureObject(), GX_TEXMAP0);
+        texture->BindNativeTexture(GX_TEXMAP0);
         GX_Begin(GX_QUADS, GX_VTXFMT0, 4);
         GX_Position3f32(x, y, 0.0f);
         GX_Color4u8(color.X, color.Y, color.Z, color.W);

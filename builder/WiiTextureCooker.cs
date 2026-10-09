@@ -1,9 +1,15 @@
+using helengine.editor;
+
 namespace helengine.wii.builder;
 
 /// <summary>
 /// Cooks shared-engine texture assets into Wii-native serialized texture payloads.
 /// </summary>
 public sealed class WiiTextureCooker {
+    /// <summary>Retains the legacy tag4 format used by approved authored textures and fonts.</summary>
+    static readonly TextureAssetColorFormat WiiPackedColorFormat = TextureAssetColorFormat.GxRgb5A3;
+    /// <summary>Identifies the legacy cook independently from the new native GX selections.</summary>
+    const string WiiPackedColorFormatId = "GxRgb5A3";
     /// <summary>
     /// Cooks one shared-engine texture asset into a Wii-native texture asset.
     /// </summary>
@@ -11,48 +17,120 @@ public sealed class WiiTextureCooker {
     /// <param name="settings">Resolved Wii texture cook settings.</param>
     /// <returns>Wii-native cooked texture asset.</returns>
     public TextureAsset CookTexture(TextureAsset sourceTexture, WiiTextureCookSettings settings) {
-        if (sourceTexture == null) {
-            throw new ArgumentNullException(nameof(sourceTexture));
-        } else if (settings == null) {
-            throw new ArgumentNullException(nameof(settings));
-        }
-
-        // GxRgb5A3 is the only Wii-native cook path; settings that request another format crush onto it
-        // instead of failing the whole platform build over a per-texture format id.
-
+        ArgumentNullException.ThrowIfNull(sourceTexture);
+        ArgumentNullException.ThrowIfNull(settings);
+        settings.Validate();
+        if (settings.ColorFormatId != WiiPackedColorFormatId) return CookNativeTexture(sourceTexture, settings);
         TextureAsset workingTexture = CloneTextureAsset(sourceTexture);
-        if (workingTexture.Width == 0 || workingTexture.Height == 0) {
-            throw new InvalidOperationException("Wii textures require nonzero dimensions.");
-        }
-
-        if (workingTexture.ColorFormat == TextureAssetColorFormat.GxRgb5A3) {
-            if (settings.MaxResolution > 0 && (workingTexture.Width > settings.MaxResolution || workingTexture.Height > settings.MaxResolution)) {
-                throw new InvalidOperationException("Wii textures cannot resize prepacked GxRgb5A3 payloads. The editor must provide an RGBA32 source texture when downscaling is required.");
+        try {
+            if (workingTexture.Width == 0 || workingTexture.Height == 0) throw new InvalidOperationException("Wii textures require nonzero dimensions.");
+            if (workingTexture.ColorFormat == WiiPackedColorFormat) {
+                int expected = checked(((workingTexture.Width + 3) & ~3) * ((workingTexture.Height + 3) & ~3) * 2);
+                if (workingTexture.Colors.Length != expected) throw new InvalidOperationException("Legacy GxRgb5A3 texture has invalid tiled storage.");
+                if (settings.MaxResolution > 0 && (workingTexture.Width > settings.MaxResolution || workingTexture.Height > settings.MaxResolution)) {
+                    throw new InvalidOperationException("Wii textures cannot resize prepacked GxRgb5A3 payloads. The editor must provide an RGBA32 source texture when downscaling is required.");
+                }
+                ValidateHardwareDimensions(workingTexture);
+                TextureAsset result = CloneTextureAsset(workingTexture);
+                result.AlphaPrecision = settings.AlphaPrecision;
+                return result;
             }
-
+            if (workingTexture.ColorFormat != TextureAssetColorFormat.Rgba32) {
+                byte[] rgba = TextureAssetPixelCodec.DecodeToRgba32(workingTexture);
+                workingTexture.Colors = rgba;
+                workingTexture.PaletteColors = Array.Empty<byte>();
+                workingTexture.ColorFormat = TextureAssetColorFormat.Rgba32;
+            }
+            if (settings.MaxResolution > 0) {
+                TextureAsset resized = ResizeTextureIfNeeded(workingTexture, settings.MaxResolution);
+                if (!ReferenceEquals(resized, workingTexture)) {
+                    workingTexture.Dispose();
+                    workingTexture = resized;
+                }
+            }
             workingTexture.AlphaPrecision = settings.AlphaPrecision;
-            return workingTexture;
-        } else if (workingTexture.ColorFormat != TextureAssetColorFormat.Rgba32) {
-            throw new InvalidOperationException($"Wii texture cooking requires RGBA32 source textures, but got '{workingTexture.ColorFormat}'.");
+            ValidateHardwareDimensions(workingTexture);
+            TextureAsset cooked = new() {
+                Width = workingTexture.Width, Height = workingTexture.Height,
+                Colors = EncodeRgba32ToGxRgb5A3(workingTexture), PaletteColors = Array.Empty<byte>(),
+                ColorFormat = WiiPackedColorFormat, AlphaPrecision = settings.AlphaPrecision,
+                IsEngineOwned = workingTexture.IsEngineOwned
+            };
+            CopyIdentity(sourceTexture, cooked);
+            return cooked;
+        } finally {
+            workingTexture.Dispose();
         }
+    }
 
-        if (settings.MaxResolution > 0) {
-            workingTexture = ResizeTextureIfNeeded(workingTexture, settings.MaxResolution);
-        }
-
-        workingTexture.AlphaPrecision = settings.AlphaPrecision;
-        byte[] packedColors = EncodeRgba32ToGxRgb5A3(workingTexture);
-        return new TextureAsset {
-            Id = workingTexture.Id,
-            RuntimeAssetId = workingTexture.RuntimeAssetId,
-            Width = workingTexture.Width,
-            Height = workingTexture.Height,
-            Colors = packedColors,
-            PaletteColors = Array.Empty<byte>(),
-            ColorFormat = TextureAssetColorFormat.GxRgb5A3,
-            AlphaPrecision = settings.AlphaPrecision,
-            IsEngineOwned = workingTexture.IsEngineOwned
+    /// <summary>Resizes private RGBA storage and quantizes indexed sources before encoding the new GX native container.</summary>
+    TextureAsset CookNativeTexture(TextureAsset sourceTexture, WiiTextureCookSettings settings) {
+        GxNativeTextureFormatCatalog.TryGetFormat(settings.ColorFormatId, out GxNativeTextureFormatDefinition format);
+        using TextureAsset rgba = new() {
+            Width = sourceTexture.Width, Height = sourceTexture.Height,
+            ColorFormat = TextureAssetColorFormat.Rgba32, AlphaPrecision = TextureAssetAlphaPrecision.A8,
+            Colors = DecodeSourceTexture(sourceTexture), PaletteColors = Array.Empty<byte>()
         };
+        CopyIdentity(sourceTexture, rgba);
+        TextureAssetProcessor processor = new();
+        TextureAsset resized = null;
+        TextureAsset indexed = null;
+        try {
+            resized = processor.Apply(rgba, new TextureAssetProcessorSettings {
+                MaxResolution = settings.MaxResolution, ColorFormat = TextureAssetColorFormat.Rgba32, AlphaPrecision = TextureAssetAlphaPrecision.A8
+            });
+            TextureAsset input = resized;
+            if (format.IsIndexed) {
+                // The shared quantizer's 256-entry result is a valid subset of the full 14-bit CI14X2 codec.
+                indexed = processor.Apply(resized, new TextureAssetProcessorSettings {
+                    MaxResolution = 0,
+                    ColorFormat = format.IndexBitDepth == 4 ? TextureAssetColorFormat.Indexed4 : TextureAssetColorFormat.Indexed8,
+                    AlphaPrecision = TextureAssetAlphaPrecision.A8,
+                    IndexingMethodId = settings.IndexingMethodId
+                });
+                CopyIdentity(sourceTexture, indexed);
+                input = indexed;
+            }
+            TextureAsset cooked = GxNativeTextureCodec.Encode(input, settings.ColorFormatId, settings.AlphaPrecision);
+            CopyIdentity(sourceTexture, cooked);
+            return cooked;
+        } finally {
+            indexed?.Dispose();
+            if (resized != null && !ReferenceEquals(resized, rgba)) resized.Dispose();
+        }
+    }
+
+    /// <summary>Decodes historical headerless RGB5A3 tiles or shared encoded sources into independent RGBA bytes for native recooking.</summary>
+    static byte[] DecodeSourceTexture(TextureAsset sourceTexture) {
+        if (sourceTexture.ColorFormat != WiiPackedColorFormat) return TextureAssetPixelCodec.DecodeToRgba32(sourceTexture);
+        int width = sourceTexture.Width;
+        int height = sourceTexture.Height;
+        int storageWidth = (width + 3) & ~3;
+        int expected = checked(storageWidth * ((height + 3) & ~3) * 2);
+        if (width == 0 || height == 0 || sourceTexture.Colors == null || sourceTexture.Colors.Length != expected) throw new InvalidOperationException("Legacy GxRgb5A3 texture has invalid tiled storage.");
+        byte[] rgba = new byte[checked(width * height * 4)];
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int tile = ((y / 4) * (storageWidth / 4) + x / 4) * 32;
+                int pixel = (y % 4) * 4 + x % 4;
+                GxNativeTexturePixelCodec.DecodeColor(sourceTexture.Colors, tile + pixel * 2, 2, rgba, (y * width + x) * 4);
+            }
+        }
+        return rgba;
+    }
+
+    /// <summary>Preserves authoring identity in independent metadata containers without changing source storage.</summary>
+    internal static void CopyIdentity(TextureAsset source, TextureAsset destination) {
+        destination.Id = source.Id;
+        destination.RuntimeAssetId = source.RuntimeAssetId;
+        destination.AuthoringAssetId = source.AuthoringAssetId;
+        destination.FormerAuthoringAssetIds = source.FormerAuthoringAssetIds == null ? null : (string[])source.FormerAuthoringAssetIds.Clone();
+        destination.IsEngineOwned = source.IsEngineOwned;
+    }
+
+    /// <summary>Rejects textures outside GX's 1024-pixel hardware limit after honoring the authored resize setting.</summary>
+    static void ValidateHardwareDimensions(TextureAsset texture) {
+        if (texture.Width > 1024 || texture.Height > 1024) throw new InvalidOperationException("Wii textures exceed the GX 1024-pixel hardware limit after resizing.");
     }
 
     /// <summary>
@@ -68,6 +146,8 @@ public sealed class WiiTextureCooker {
         return new TextureAsset {
             Id = sourceTexture.Id,
             RuntimeAssetId = sourceTexture.RuntimeAssetId,
+            AuthoringAssetId = sourceTexture.AuthoringAssetId,
+            FormerAuthoringAssetIds = sourceTexture.FormerAuthoringAssetIds == null ? null : (string[])sourceTexture.FormerAuthoringAssetIds.Clone(),
             Width = sourceTexture.Width,
             Height = sourceTexture.Height,
             Colors = sourceTexture.Colors == null ? Array.Empty<byte>() : [.. sourceTexture.Colors],

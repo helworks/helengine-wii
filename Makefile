@@ -84,6 +84,7 @@ GENERATED_BRIDGE_SOURCES := \
 	$(SOURCE_DIR)/platform/wii/WiiRuntimeMaterial.cpp \
 	$(SOURCE_DIR)/platform/wii/WiiRuntimeModel.cpp \
 	$(SOURCE_DIR)/platform/wii/WiiRuntimeTexture.cpp \
+	$(SOURCE_DIR)/platform/wii/WiiNativeTextureLayout.cpp \
 	$(SOURCE_DIR)/platform/wii/WiiDiscInterface.cpp \
 	$(SOURCE_DIR)/platform/wii/WiiDiscFileSystem.cpp \
 	$(SOURCE_DIR)/platform/wii/WiiSceneBootstrap.cpp

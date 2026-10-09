@@ -87,16 +87,17 @@ public static class WiiPlatformDefinitionFactory {
     /// </summary>
     /// <returns>Texture capability metadata for Wii builder-owned texture cook contracts.</returns>
     static PlatformTextureFormatCapabilityDefinition CreateTextureFormatCapabilities() {
-        return new PlatformTextureFormatCapabilityDefinition(
-            [
-                TextureAssetColorFormat.GxRgb5A3.ToString()
-            ],
-            [
-                TextureAssetAlphaPrecision.A8
-            ],
-            [
-                new PlatformTextureFormatCombinationDefinition(TextureAssetColorFormat.GxRgb5A3.ToString(), TextureAssetAlphaPrecision.A8)
-            ]);
+        List<string> ids = ["GxRgb5A3"];
+        HashSet<TextureAssetAlphaPrecision> alphas = [TextureAssetAlphaPrecision.A8];
+        List<PlatformTextureFormatCombinationDefinition> combinations = [new("GxRgb5A3", TextureAssetAlphaPrecision.A8)];
+        foreach (GxNativeTextureFormatDefinition format in GxNativeTextureFormatCatalog.Formats) {
+            ids.Add(format.Id);
+            foreach (TextureAssetAlphaPrecision alpha in format.SupportedAlphaPrecisions) {
+                alphas.Add(alpha);
+                combinations.Add(new PlatformTextureFormatCombinationDefinition(format.Id, alpha));
+            }
+        }
+        return new PlatformTextureFormatCapabilityDefinition(ids, alphas.OrderBy(alpha => alpha).ToArray(), combinations);
     }
 
     /// <summary>

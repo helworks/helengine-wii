@@ -51,6 +51,10 @@ namespace helengine::wii {
         /// Releases one Wii runtime texture.
         void ReleaseTexture(RuntimeTexture* texture) override;
 
+        /// Updates only a live backend texture through its retained native direct-color storage.
+        void UpdateTextureRegionCore(RuntimeTexture* texture, int32_t x, int32_t y, int32_t width, int32_t height,
+            Array<uint8_t>* rgba8, int32_t sourceRowPitch) override;
+
         /// Releases one font asset.
         void ReleaseFont(FontAsset* font) override;
 
@@ -147,5 +151,8 @@ namespace helengine::wii {
 
         /// Whether the current frame submitted at least one glyph quad through the GX text pass.
         bool DidSubmitGlyph;
+
+        /// Backend textures awaiting a GX completion fence before their owned tile and palette memory can be freed.
+        std::vector<RuntimeTexture*> ReleasedTextures;
     };
 }

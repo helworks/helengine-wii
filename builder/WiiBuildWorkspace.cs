@@ -57,16 +57,22 @@ public static class WiiBuildWorkspace {
         List<PlatformBuildItemOutcome> sceneOutcomes = BuildSuccessfulSceneOutcomes(request.Manifest.Scenes);
         List<PlatformBuildItemOutcome> looseAssetOutcomes = BuildSuccessfulLooseAssetOutcomes(request.Manifest.LooseAssets);
 
+        WritePhaseMarker(phaseMarkerPath, "platform cook work items begin");
+        WiiPlatformCookWorkItemExecutor textureExecutor = new();
+        IReadOnlyList<WiiTextureCookWorkPlan> texturePlans = textureExecutor.Prepare(
+            request.Manifest.PlatformCookWorkItems ?? [], request.Manifest.CookedArtifacts ?? [], Directory.GetCurrentDirectory(), paths.StagingRootPath, cancellationToken);
+        ValidatePackagedArtifactSources(request, paths.StagingRootPath, diagnosticReporter, diagnostics, cancellationToken);
+        if (diagnostics.Count > 0) return Task.FromResult(new PlatformBuildReport(false, [.. diagnostics], [.. sceneOutcomes], [.. looseAssetOutcomes]));
+        IReadOnlyList<WiiFontAtlasCookWorkPlan> fontPlans = PrepareEmbeddedFontAtlases(request, paths.StagingRootPath, texturePlans, cancellationToken);
         ResetDirectory(paths.StagingRootPath);
         Directory.CreateDirectory(paths.StagingRootPath);
-        WritePhaseMarker(phaseMarkerPath, "platform cook work items begin");
-        ExecutePlatformCookWorkItems(request.Manifest.PlatformCookWorkItems, paths.StagingRootPath);
+        textureExecutor.Publish(texturePlans, cancellationToken);
         WritePhaseMarker(phaseMarkerPath, "platform cook work items completed");
         WritePhaseMarker(phaseMarkerPath, "stage cooked artifacts begin");
         StageCookedArtifacts(request, paths.StagingRootPath, progressReporter, diagnosticReporter, diagnostics, cancellationToken);
         WritePhaseMarker(phaseMarkerPath, "stage cooked artifacts completed");
         WritePhaseMarker(phaseMarkerPath, "normalize embedded font atlases begin");
-        NormalizeEmbeddedFontAtlases(paths.StagingRootPath);
+        PublishEmbeddedFontAtlases(fontPlans, paths.StagingRootPath);
         WritePhaseMarker(phaseMarkerPath, "normalize embedded font atlases completed");
 
         if (diagnostics.Count > 0) {
@@ -151,7 +157,7 @@ public static class WiiBuildWorkspace {
             cancellationToken.ThrowIfCancellationRequested();
 
             PlatformBuildArtifact artifact = cookedArtifacts[artifactIndex];
-            string sourcePath = ResolveSourcePath(artifact.RelativePath);
+            string sourcePath = WiiTextureCookPath.Resolve(Directory.GetCurrentDirectory(), artifact.RelativePath);
             if (!File.Exists(sourcePath)) {
                 AddDiagnostic(
                     diagnostics,
@@ -165,7 +171,7 @@ public static class WiiBuildWorkspace {
                 continue;
             }
 
-            string destinationPath = Path.Combine(stagingRootPath, NormalizeRelativePath(artifact.RelativePath));
+            string destinationPath = WiiTextureCookPath.Resolve(stagingRootPath, artifact.RelativePath);
             string destinationDirectoryPath = Path.GetDirectoryName(destinationPath) ?? throw new InvalidOperationException($"Destination directory could not be resolved for '{destinationPath}'.");
             Directory.CreateDirectory(destinationDirectoryPath);
             File.Copy(sourcePath, destinationPath, true);
@@ -178,55 +184,83 @@ public static class WiiBuildWorkspace {
         }
     }
 
-    /// <summary>
-    /// Executes any builder-owned platform cook work items emitted by the shared editor build graph.
-    /// </summary>
-    /// <param name="platformCookWorkItems">Platform cook work items emitted by the editor build graph.</param>
-    /// <param name="stagingRootPath">Staging root that receives the cooked outputs.</param>
-    static void ExecutePlatformCookWorkItems(PlatformCookWorkItem[] platformCookWorkItems, string stagingRootPath) {
-        if (platformCookWorkItems == null) {
-            throw new ArgumentNullException(nameof(platformCookWorkItems));
-        } else if (string.IsNullOrWhiteSpace(stagingRootPath)) {
-            throw new ArgumentException("Staging root path must be provided.", nameof(stagingRootPath));
+    /// <summary>Checks every manifest source before resetting staged content or publishing prepared textures.</summary>
+    static void ValidatePackagedArtifactSources(PlatformBuildRequest request, string stagingRootPath,
+        IPlatformBuildDiagnosticReporter reporter, List<PlatformBuildDiagnostic> diagnostics, CancellationToken cancellationToken) {
+        string stagePrefix = Path.TrimEndingDirectorySeparator(Path.GetFullPath(stagingRootPath)) + Path.DirectorySeparatorChar;
+        foreach (PlatformBuildArtifact artifact in request.Manifest.CookedArtifacts ?? []) {
+            cancellationToken.ThrowIfCancellationRequested();
+            string source = WiiTextureCookPath.Resolve(Directory.GetCurrentDirectory(), artifact.RelativePath);
+            if (source.StartsWith(stagePrefix, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Wii artifact source cannot reside in the staging tree being replaced.");
+            if (!File.Exists(source)) {
+                AddDiagnostic(diagnostics, reporter, PlatformBuildDiagnosticSeverity.Error, "WIIPACK001",
+                    $"Cooked artifact '{artifact.RelativePath}' was not found in the staged package root.",
+                    string.Empty, artifact.LogicalArtifactId, artifact.RelativePath);
+            }
         }
-
-        if (platformCookWorkItems.Length == 0) {
-            return;
-        }
-
-        new WiiPlatformCookWorkItemExecutor().Execute(platformCookWorkItems, Directory.GetCurrentDirectory(), stagingRootPath);
     }
 
-    /// <summary>
-    /// Rewrites staged packaged fonts that still embed raw atlas bytes so Wii runtime can load one cooked external atlas texture.
-    /// </summary>
-    /// <param name="stagingRootPath">Staging root that already contains packaged cooked artifacts.</param>
-    static void NormalizeEmbeddedFontAtlases(string stagingRootPath) {
-        if (string.IsNullOrWhiteSpace(stagingRootPath)) {
-            throw new ArgumentException("Staging root path must be provided.", nameof(stagingRootPath));
+    /// <summary>Prepares embedded font externalization without replacing explicit native atlases or modifying prior staged files.</summary>
+    static IReadOnlyList<WiiFontAtlasCookWorkPlan> PrepareEmbeddedFontAtlases(PlatformBuildRequest request, string stagingRootPath,
+        IReadOnlyList<WiiTextureCookWorkPlan> texturePlans, CancellationToken cancellationToken) {
+        HashSet<string> reserved = new(StringComparer.OrdinalIgnoreCase);
+        HashSet<string> explicitAtlases = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, string> manifestSources = new(StringComparer.OrdinalIgnoreCase);
+        foreach (PlatformBuildArtifact artifact in request.Manifest.CookedArtifacts ?? []) {
+            WiiTextureCookPath.Reserve(reserved, artifact.RelativePath);
+            explicitAtlases.Add(WiiDiscPathResolver.ResolvePhysicalRelativePath(WiiTextureCookPath.Normalize(artifact.RelativePath)));
+            manifestSources.Add(WiiDiscPathResolver.ResolvePhysicalRelativePath(WiiTextureCookPath.Normalize(artifact.RelativePath)), artifact.RelativePath);
         }
-
-        string cookedFontsRootPath = Path.Combine(stagingRootPath, "cooked", "fonts");
-        if (!Directory.Exists(cookedFontsRootPath)) {
-            return;
+        foreach (WiiTextureCookWorkPlan plan in texturePlans) {
+            WiiTextureCookPath.Reserve(reserved, plan.WorkItem.OutputRelativePath);
+            explicitAtlases.Add(WiiDiscPathResolver.ResolvePhysicalRelativePath(WiiTextureCookPath.Normalize(plan.WorkItem.OutputRelativePath)));
         }
-
-        WiiTextureCooker textureCooker = new WiiTextureCooker();
-        WiiTextureCookSettings cookSettings = new WiiTextureCookSettings(0, TextureAssetColorFormat.GxRgb5A3.ToString(), TextureAssetAlphaPrecision.A8);
-        string[] fontPaths = Directory.GetFiles(cookedFontsRootPath, "*.hefont", SearchOption.AllDirectories);
-        for (int fontIndex = 0; fontIndex < fontPaths.Length; fontIndex++) {
-            string fontPath = fontPaths[fontIndex];
-            FontAsset fontAsset = ReadPackagedFontAsset(fontPath);
-            if (!HasEmbeddedFontAtlas(fontAsset)) {
-                continue;
+        List<WiiFontAtlasCookWorkPlan> plans = [];
+        foreach (PlatformBuildArtifact artifact in request.Manifest.CookedArtifacts ?? []) {
+            cancellationToken.ThrowIfCancellationRequested();
+            string fontRelative = WiiTextureCookPath.Normalize(artifact.RelativePath);
+            if (!fontRelative.StartsWith("cooked/fonts/", StringComparison.OrdinalIgnoreCase) || !Path.GetExtension(fontRelative).Equals(".hefont", StringComparison.OrdinalIgnoreCase)) continue;
+            using FontAsset font = ReadPackagedFontAsset(WiiTextureCookPath.Resolve(Directory.GetCurrentDirectory(), fontRelative));
+            if (!HasEmbeddedFontAtlas(font)) continue;
+            string atlasRelative = WiiTextureCookPath.Normalize(ResolveCookedAtlasTextureRelativePath(
+                stagingRootPath, WiiTextureCookPath.Resolve(stagingRootPath, fontRelative), font));
+            WiiTextureCookPath.Resolve(stagingRootPath, atlasRelative);
+            string physicalAtlas = WiiDiscPathResolver.ResolvePhysicalRelativePath(atlasRelative);
+            if (physicalAtlas.Equals(WiiDiscPathResolver.ResolvePhysicalRelativePath(fontRelative), StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Wii atlas path cannot replace its packaged font.");
+            byte[] atlasPayload = null;
+            if (!explicitAtlases.Contains(physicalAtlas)) {
+                WiiTextureCookPath.Reserve(reserved, atlasRelative);
+                using TextureAsset cooked = CreateCookedAtlasTexture(font.SourceTextureAsset);
+                atlasPayload = FilesAssetSerializer.SerializeToBytes(cooked);
+            } else if (manifestSources.TryGetValue(physicalAtlas, out string atlasSource)) {
+                using TextureAsset explicitTexture = FilesAssetSerializer.DeserializeFromBytes(File.ReadAllBytes(WiiTextureCookPath.Resolve(Directory.GetCurrentDirectory(), atlasSource))) as TextureAsset
+                    ?? throw new InvalidOperationException("Wii explicit font atlas manifest artifact is not a texture.");
+                if (explicitTexture.ColorFormat == TextureAssetColorFormat.GxRgb5A3) {
+                    using TextureAsset validated = new WiiTextureCooker().CookTexture(explicitTexture, new WiiTextureCookSettings(0, "GxRgb5A3", explicitTexture.AlphaPrecision));
+                } else {
+                    TextureAssetPixelCodec.DecodeToRgba32(explicitTexture);
+                }
             }
+            font.SourceTextureAsset.Dispose();
+            font.SourceTextureAsset = null;
+            font.CookedAtlasTextureRelativePath = atlasRelative;
+            using MemoryStream fontStream = new();
+            FilesFontAssetBinarySerializer.Serialize(fontStream, font);
+            plans.Add(new WiiFontAtlasCookWorkPlan { FontRelativePath = fontRelative, FontPayload = fontStream.ToArray(), AtlasRelativePath = atlasRelative, AtlasPayload = atlasPayload });
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return plans;
+    }
 
-            string cookedAtlasTextureRelativePath = ResolveCookedAtlasTextureRelativePath(stagingRootPath, fontPath, fontAsset);
-            TextureAsset cookedAtlasTexture = textureCooker.CookTexture(fontAsset.SourceTextureAsset, cookSettings);
-            WriteTextureAsset(Path.Combine(stagingRootPath, NormalizeRelativePath(cookedAtlasTextureRelativePath)), cookedAtlasTexture);
-            fontAsset.CookedAtlasTextureRelativePath = cookedAtlasTextureRelativePath.Replace('\\', '/');
-            fontAsset.SourceTextureAsset = null;
-            WriteFontAsset(fontPath, fontAsset);
+    /// <summary>Writes already prepared font metadata and only the legacy atlases not supplied by explicit texture cooks.</summary>
+    static void PublishEmbeddedFontAtlases(IReadOnlyList<WiiFontAtlasCookWorkPlan> plans, string stagingRootPath) {
+        foreach (WiiFontAtlasCookWorkPlan plan in plans) {
+            if (plan.AtlasPayload != null) {
+                string atlasPath = WiiTextureCookPath.Resolve(stagingRootPath, plan.AtlasRelativePath);
+                Directory.CreateDirectory(Path.GetDirectoryName(atlasPath));
+                File.WriteAllBytes(atlasPath, plan.AtlasPayload);
+            }
+            File.WriteAllBytes(WiiTextureCookPath.Resolve(stagingRootPath, plan.FontRelativePath), plan.FontPayload);
         }
     }
 
