@@ -1,3 +1,4 @@
+#include "Batch2DGeometry.hpp"
 #include "platform/wii/WiiRenderManager2D.hpp"
 
 #include <algorithm>
@@ -26,6 +27,7 @@
 #include "TextureAsset.hpp"
 #include "system/io/file.hpp"
 #include "platform/wii/WiiRuntimeTexture.hpp"
+#include "platform/wii/WiiTexturedQuadGeometry.hpp"
 #include "runtime/native_cast.hpp"
 #include "runtime/native_exceptions.hpp"
 #include "runtime/finally.hpp"
@@ -338,10 +340,7 @@ namespace helengine::wii {
             throw new ArgumentNullException("commandList");
         }
 
-        float4 bounds = commandList->GetTexturedQuadBounds(payloadIndex);
-        if (bounds.Z <= 0.0f || bounds.W <= 0.0f) {
-            return;
-        }
+        const SpriteQuad2D quad = commandList->GetTexturedQuadGeometry(payloadIndex);
 
         RuntimeTexture* runtimeTexture = commandList->GetTexturedQuadTexture(payloadIndex);
         WiiRuntimeTexture* texture = static_cast<WiiRuntimeTexture*>(runtimeTexture);
@@ -351,7 +350,7 @@ namespace helengine::wii {
 
         float4 sourceRect = commandList->GetTexturedQuadSourceRect(payloadIndex);
         byte4 color = commandList->GetTexturedQuadColor(payloadIndex);
-        DrawTexturedQuad2D(bounds.X, bounds.Y, bounds.Z, bounds.W, sourceRect, color, texture);
+        DrawTexturedQuad2D(quad, sourceRect, color, texture);
         static_cast<void>(logicalFrameWidth);
         static_cast<void>(logicalFrameHeight);
     }
@@ -375,7 +374,7 @@ namespace helengine::wii {
 
         float4 sourceRect = commandList->GetGlyphQuadSourceRect(payloadIndex);
         byte4 color = commandList->GetGlyphQuadColor(payloadIndex);
-        DrawTexturedQuad2D(bounds.X, bounds.Y, bounds.Z, bounds.W, sourceRect, color, texture);
+        DrawTexturedQuad2D(bounds.X, bounds.Y, bounds.Z, bounds.W, 0.0f, sourceRect, color, texture);
         DidSubmitGlyph = true;
         static_cast<void>(logicalFrameWidth);
         static_cast<void>(logicalFrameHeight);
@@ -470,7 +469,7 @@ namespace helengine::wii {
             throw new ArgumentNullException("sprite");
         }
 
-        SpriteQueue.push_back(WiiSpriteDrawCommand { sprite });
+        SpriteQueue.push_back(WiiSpriteDrawCommand { sprite, Batch2DGeometry::ResolveSpriteQuad(sprite) });
     }
 
     /// Accepts a text draw request without issuing native rendering yet.
@@ -570,11 +569,20 @@ namespace helengine::wii {
         GX_SetScissor(0U, 0U, physicalFrameWidth, physicalFrameHeight);
     }
 
-    /// Emits one textured screen-space quad in pixel coordinates for the active glyph pass.
-    void WiiRenderManager2D::DrawTexturedQuad2D(float x, float y, float width, float height, const float4& sourceRect, byte4 color, WiiRuntimeTexture* texture) {
-        if (texture == nullptr) {
-            throw new ArgumentNullException("texture");
-        }
+    /// Keeps the existing rectangle path for unrotated glyphs.
+    void WiiRenderManager2D::DrawTexturedQuad2D(float x, float y, float width, float height, float rotationRadians, const float4& sourceRect, byte4 color, WiiRuntimeTexture* texture) {
+        const std::array<double, 8> corners = WiiTexturedQuadGeometry::Create(x, y, width, height, rotationRadians);
+        SpriteQuad2D quad;
+        quad.TopLeft = float2(corners[0], corners[1]);
+        quad.TopRight = float2(corners[2], corners[3]);
+        quad.BottomRight = float2(corners[4], corners[5]);
+        quad.BottomLeft = float2(corners[6], corners[7]);
+        DrawTexturedQuad2D(quad, sourceRect, color, texture);
+    }
+
+    /// Keeps UVs on resolved world-space corners while GX applies the active screen-space scissor.
+    void WiiRenderManager2D::DrawTexturedQuad2D(const SpriteQuad2D& quad, const float4& sourceRect, byte4 color, WiiRuntimeTexture* texture) {
+        if (texture == nullptr) { throw new ArgumentNullException("texture"); }
 
         const float logicalWidth = static_cast<float>(std::max(1, texture->get_Width()));
         const float logicalHeight = static_cast<float>(std::max(1, texture->get_Height()));
@@ -589,16 +597,16 @@ namespace helengine::wii {
         GX_InitTexObjWrapMode(texture->GetNativeTextureObject(), GX_CLAMP, GX_CLAMP);
         texture->BindNativeTexture(GX_TEXMAP0);
         GX_Begin(GX_QUADS, GX_VTXFMT0, 4);
-        GX_Position3f32(x, y, 0.0f);
+        GX_Position3f32(quad.TopLeft.X, quad.TopLeft.Y, 0.0f);
         GX_Color4u8(color.X, color.Y, color.Z, color.W);
         GX_TexCoord2f32(nativeSourceRect.X, nativeSourceRect.Y);
-        GX_Position3f32(x + width, y, 0.0f);
+        GX_Position3f32(quad.TopRight.X, quad.TopRight.Y, 0.0f);
         GX_Color4u8(color.X, color.Y, color.Z, color.W);
         GX_TexCoord2f32(nativeSourceRect.X + nativeSourceRect.Z, nativeSourceRect.Y);
-        GX_Position3f32(x + width, y + height, 0.0f);
+        GX_Position3f32(quad.BottomRight.X, quad.BottomRight.Y, 0.0f);
         GX_Color4u8(color.X, color.Y, color.Z, color.W);
         GX_TexCoord2f32(nativeSourceRect.X + nativeSourceRect.Z, nativeSourceRect.Y + nativeSourceRect.W);
-        GX_Position3f32(x, y + height, 0.0f);
+        GX_Position3f32(quad.BottomLeft.X, quad.BottomLeft.Y, 0.0f);
         GX_Color4u8(color.X, color.Y, color.Z, color.W);
         GX_TexCoord2f32(nativeSourceRect.X, nativeSourceRect.Y + nativeSourceRect.W);
         GX_End();

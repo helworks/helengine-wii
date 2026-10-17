@@ -114,6 +114,9 @@ namespace helengine::wii {
         /// Tracks whether the generated engine core finished initialization.
         bool EngineInitialized;
 
+        /// Last transition-active state reported to the boot trace, so diagnostics record completion without per-frame logging.
+        bool LastReportedSceneTransitionActive = false;
+
         /// Counts the number of frames presented after generated-core initialization succeeds.
         uint32_t PresentedFrameCount;
 

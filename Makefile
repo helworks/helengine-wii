@@ -1,4 +1,5 @@
 DEVKITPRO ?= /opt/devkitpro
+.DEFAULT_GOAL := all
 DEVKITPPC ?= $(DEVKITPRO)/devkitPPC
 LIBOGC ?= $(DEVKITPRO)/libogc
 HELENGINE_CORE_CPP_ROOT ?=
@@ -19,6 +20,7 @@ BASE_SOURCES := \
 GENERATED_BRIDGE_SOURCES :=
 GENERATED_CORE_SOURCE :=
 GENERATED_CORE_TRANSLATION_UNIT :=
+GENERATED_STARTUP_MANIFEST_SOURCE :=
 GENERATED_CONFIG := $(HELENGINE_CORE_CPP_ROOT)/helcpp_config.hpp
 GENERATED_RUNTIME_SCENE_MANIFEST := $(HELENGINE_CORE_CPP_ROOT)/runtime/wii_runtime_scene_manifest.hpp
 APPLOADER_SOURCE := $(SOURCE_DIR)/platform/wii/apploader/WiiDiscApploader.cpp
@@ -57,6 +59,15 @@ else
 $(error HELENGINE_CORE_CPP_ROOT does not contain helengine_core_amalgamated.cpp or helengine_core_unity.cpp)
 endif
 GENERATED_CORE_SOURCE := $(HELENGINE_CORE_CPP_ROOT)/$(GENERATED_CORE_TRANSLATION_UNIT)
+ifeq ($(strip $(HELENGINE_WII_BOOT_MODE)),packaged-disc)
+GENERATED_STARTUP_MANIFEST_SOURCE := $(HELENGINE_CORE_CPP_ROOT)/runtime/runtime_startup_manifest.cpp
+ifeq ($(wildcard $(GENERATED_STARTUP_MANIFEST_SOURCE)),)
+$(error Packaged generated Wii builds require runtime/runtime_startup_manifest.cpp)
+endif
+ifeq ($(wildcard $(HELENGINE_CORE_CPP_ROOT)/runtime/runtime_startup_manifest.hpp),)
+$(error Packaged generated Wii builds require runtime/runtime_startup_manifest.hpp)
+endif
+endif
 ifeq ($(wildcard $(GENERATED_CONFIG)),)
 $(error HELENGINE_CORE_CPP_ROOT does not contain helcpp_config.hpp)
 endif
@@ -106,6 +117,9 @@ OBJECTS := $(patsubst $(SOURCE_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ALL_SOURCE_SOURCES)
 
 ifneq ($(strip $(GENERATED_CORE_SOURCE)),)
 OBJECTS += $(BUILD_DIR)/generated/$(GENERATED_CORE_TRANSLATION_UNIT:.cpp=.o)
+endif
+ifneq ($(strip $(GENERATED_STARTUP_MANIFEST_SOURCE)),)
+OBJECTS += $(BUILD_DIR)/generated/runtime_startup_manifest.o
 endif
 
 CXXFLAGS := \
@@ -199,6 +213,12 @@ $(APPLOADER_OBJECT): $(APPLOADER_SOURCE) $(APPLOADER_LINKER_SCRIPT)
 $(BUILD_DIR)/generated/$(GENERATED_CORE_TRANSLATION_UNIT:.cpp=.o): $(GENERATED_CORE_SOURCE)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
+
+ifneq ($(strip $(GENERATED_STARTUP_MANIFEST_SOURCE)),)
+$(BUILD_DIR)/generated/runtime_startup_manifest.o: $(GENERATED_STARTUP_MANIFEST_SOURCE)
+	@mkdir -p $(dir $@)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
+endif
 
 clean:
 	@rm -rf $(BUILD_DIR)

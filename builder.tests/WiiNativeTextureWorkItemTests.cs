@@ -56,7 +56,7 @@ public sealed class WiiNativeTextureWorkItemTests : IDisposable {
     [Fact]
     public void LegacyFontAtlasDefaultStillCooks() {
         var capability = Assert.Single(WiiPlatformDefinitionFactory.Create().AssetCookCapabilities, item => item.SourceAssetKind == "font-atlas-texture");
-        var item = new PlatformCookWorkItem("atlas", Source, "font-atlas-texture", "wii", "runtime-texture", "fonts/legacy.hetex", "fonts/legacy", "source", "settings", capability.DefaultSerializedPlatformSettings, []);
+        var item = new PlatformCookWorkItem("atlas", Source, capability.SourceAssetKind, "wii", capability.TargetArtifactKind, "fonts/legacy.hetex", "fonts/legacy", "source", "settings", capability.DefaultSerializedPlatformSettings, []);
         new WiiPlatformCookWorkItemExecutor().Execute([item], Root, Stage);
         using TextureAsset cooked = Assert.IsType<TextureAsset>(FilesAssetSerializer.DeserializeFromBytes(File.ReadAllBytes(Path.Combine(Stage, item.OutputRelativePath))));
         Assert.Equal(TextureAssetColorFormat.GxRgb5A3, cooked.ColorFormat);

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include "SpriteQuad2D.hpp"
 
 #include "IRenderVisitor2D.hpp"
 #include "RenderManager2D.hpp"
@@ -19,6 +20,9 @@ namespace helengine::wii {
     struct WiiSpriteDrawCommand {
         /// Pointer to the shared-engine sprite drawable submitted during the current frame.
         ISpriteDrawable2D* Drawable;
+
+        /// Exact logical corners resolved at capture time.
+        SpriteQuad2D Geometry;
     };
 
     /// Stores one captured text draw request for the current Wii 2D frame.
@@ -128,8 +132,11 @@ namespace helengine::wii {
         /// Releases one transient cooked texture asset after the runtime texture has been rebuilt from its payload.
         static void ReleaseTransientTextureAsset(TextureAsset* asset);
 
-        /// Emits one textured screen-space quad in pixel coordinates for the active glyph pass.
-        void DrawTexturedQuad2D(float x, float y, float width, float height, const float4& sourceRect, byte4 color, WiiRuntimeTexture* texture);
+        /// Emits a rotated textured quad at its transformed world origin; glyph callers supply a zero angle.
+        void DrawTexturedQuad2D(float x, float y, float width, float height, float rotationRadians, const float4& sourceRect, byte4 color, WiiRuntimeTexture* texture);
+
+        /// Submits the exact resolved corners without reconstructing an angle or scale.
+        void DrawTexturedQuad2D(const SpriteQuad2D& quad, const float4& sourceRect, byte4 color, WiiRuntimeTexture* texture);
 
         /// Captured sprite draw requests in shared-engine render order.
         std::vector<WiiSpriteDrawCommand> SpriteQueue;

@@ -41,6 +41,9 @@
 #include "platform/wii/WiiSceneBootstrap.hpp"
 #include "runtime/native_exceptions.hpp"
 #include "runtime/native_list.hpp"
+#if HELENGINE_WII_PACKAGED_DISC_BOOT
+#include "runtime/runtime_startup_manifest.hpp"
+#endif
 #endif
 
 namespace helengine::wii {
@@ -449,6 +452,11 @@ namespace helengine::wii {
             options->UpdateOrderLayers = 4;
             options->RenderOrderLayers3D = 4;
             options->UpdateListInitialCapacity = 64;
+#if HELENGINE_WII_PACKAGED_DISC_BOOT
+            options->SceneLoadingBudgetMilliseconds = he_get_runtime_scene_loading_budget_milliseconds();
+            SYS_Report("[Wii] Scene loading budget=%g ms loadingScreen=%s\n", options->SceneLoadingBudgetMilliseconds, he_get_runtime_loading_screen_scene_id());
+            AppendRuntimeTrace("[WiiFile] Scene loading budget=%g ms loadingScreen=%s\n", options->SceneLoadingBudgetMilliseconds, he_get_runtime_loading_screen_scene_id());
+#endif
             options->RenderList2DInitialCapacity = 64;
             options->RenderList3DInitialCapacity = 64;
             options->StandardPlatformInputConfiguration = new StandardPlatformInputConfiguration(new List<StandardPlatformActionBinding*>({
@@ -526,11 +534,23 @@ namespace helengine::wii {
 
 #if HELENGINE_WII_PACKAGED_DISC_BOOT
             const std::string packagedStartupSceneId = WiiSceneBootstrap::GetPackagedStartupSceneId();
-            EngineCore->get_SceneManager()->LoadScene(packagedStartupSceneId, SceneLoadMode::Single);
+            const std::string loadingScreenSceneId = he_get_runtime_loading_screen_scene_id();
 #else
             const std::string startupSceneId = WiiSceneBootstrap::GetStartupSceneId();
-            EngineCore->get_SceneManager()->LoadScene(startupSceneId, SceneLoadMode::Single);
+            const std::string loadingScreenSceneId;
 #endif
+            if (!loadingScreenSceneId.empty()) {
+                EngineCore->get_SceneManager()->LoadScene(loadingScreenSceneId, SceneLoadMode::Additive);
+                EngineCore->get_SceneManager()->CommitPendingOperationsAtFrameBoundary();
+                SYS_Report("[Wii] Persistent loading screen prepared: %s\n", loadingScreenSceneId.c_str());
+                AppendRuntimeTrace("[WiiFile] Persistent loading screen prepared: %s\n", loadingScreenSceneId.c_str());
+            }
+#if HELENGINE_WII_PACKAGED_DISC_BOOT
+            EngineCore->get_SceneManager()->RequestSceneTransition(packagedStartupSceneId);
+#else
+            EngineCore->get_SceneManager()->RequestSceneTransition(startupSceneId);
+#endif
+            LastReportedSceneTransitionActive = true;
             SYS_Report("[Wii] Runtime startup scene queued.\n");
             AppendRuntimeTrace("[WiiFile] Runtime startup scene queued.\n");
             EngineInitialized = true;
@@ -586,6 +606,14 @@ namespace helengine::wii {
             EngineRenderManager2D->BeginFrame();
             SetFailureCheckpoint(WiiFailureCode::CoreUpdate);
             EngineCore->Update(1.0 / 60.0);
+            const bool transitionActive = EngineCore->get_SceneManager()->get_IsSceneTransitionActive();
+            if (transitionActive != LastReportedSceneTransitionActive) {
+                LastReportedSceneTransitionActive = transitionActive;
+                SYS_Report("[Wii] Scene transition active=%d progress=%g target=%s\n", transitionActive ? 1 : 0,
+                    EngineCore->get_SceneManager()->get_SceneTransitionProgress(), EngineCore->get_SceneManager()->get_TransitionTargetSceneId().c_str());
+                AppendRuntimeTrace("[WiiFile] Scene transition active=%d progress=%g target=%s\n", transitionActive ? 1 : 0,
+                    EngineCore->get_SceneManager()->get_SceneTransitionProgress(), EngineCore->get_SceneManager()->get_TransitionTargetSceneId().c_str());
+            }
             if (UpdateFrameLogCount < 8U && EngineCore->get_SceneManager() != nullptr) {
                 SYS_Report(
                     "[Wii] SceneManager trace stage=%s scene=%s loaded=%ld pending=%ld\n",

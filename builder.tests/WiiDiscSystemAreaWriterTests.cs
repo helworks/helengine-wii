@@ -163,6 +163,61 @@ public sealed class WiiDiscSystemAreaWriterTests {
     }
 
     /// <summary>
+    /// Rebuilds a previously staged loader after both section layout and BSS/entry metadata change, rejecting stale executable-specific fields.
+    /// </summary>
+    [Fact]
+    public void Write_AfterExecutableChanges_RefreshesAllLoadRequestsAndBootOffsets() {
+        string artifactRoot = Environment.GetEnvironmentVariable("HELENGINE_WII_TEST_ARTIFACT_ROOT")
+            ?? Path.Combine(AppContext.BaseDirectory, "native-boot-metadata");
+        string fixtureRoot = Path.Combine(artifactRoot, "changed-dol-loader");
+        string discRoot = Path.Combine(fixtureRoot, "disc");
+        string nativePath = Path.Combine(fixtureRoot, "helengine_wii.dol");
+        Directory.CreateDirectory(Path.Combine(discRoot, "files"));
+        File.WriteAllText(Path.Combine(discRoot, "files", "scene.hasset"), "selected-scene");
+        WriteFakeDol(nativePath, 0x20);
+        WriteFakeApploaderTemplate(WiiNativeApploaderTemplatePathResolver.Resolve(nativePath), 0x200);
+        WiiDiscSystemAreaWriter writer = new();
+        WiiDiscSystemAreaOptions options = new("RDEE01", "Authored menu title");
+        writer.Write(discRoot, nativePath, options);
+        byte[] oldLoader = File.ReadAllBytes(Path.Combine(discRoot, "sys", "apploader.img"));
+        byte[] oldBoot = File.ReadAllBytes(Path.Combine(discRoot, "sys", "boot.bin"));
+
+        byte[] changedDol = new byte[0x160];
+        BinaryPrimitives.WriteUInt32BigEndian(changedDol.AsSpan(0x00, 4), 0x100);
+        BinaryPrimitives.WriteUInt32BigEndian(changedDol.AsSpan(0x48, 4), 0x80006000);
+        BinaryPrimitives.WriteUInt32BigEndian(changedDol.AsSpan(0x90, 4), 0x40);
+        BinaryPrimitives.WriteUInt32BigEndian(changedDol.AsSpan(0x1C, 4), 0x140);
+        BinaryPrimitives.WriteUInt32BigEndian(changedDol.AsSpan(0x64, 4), 0x80007000);
+        BinaryPrimitives.WriteUInt32BigEndian(changedDol.AsSpan(0xAC, 4), 0x20);
+        BinaryPrimitives.WriteUInt32BigEndian(changedDol.AsSpan(0xD8, 4), 0x80008000);
+        BinaryPrimitives.WriteUInt32BigEndian(changedDol.AsSpan(0xDC, 4), 0x80);
+        BinaryPrimitives.WriteUInt32BigEndian(changedDol.AsSpan(0xE0, 4), 0x80006004);
+        File.WriteAllBytes(nativePath, changedDol);
+        writer.Write(discRoot, nativePath, options);
+
+        byte[] loader = File.ReadAllBytes(Path.Combine(discRoot, "sys", "apploader.img"));
+        byte[] boot = File.ReadAllBytes(Path.Combine(discRoot, "sys", "boot.bin"));
+        uint dolOffset = ReadBigEndianUInt32(boot, 0x420);
+        Assert.Equal(2U, ReadBigEndianUInt32(loader, FinalImageConfigOffset + 0x10));
+        Assert.Equal(0x80006004U, ReadBigEndianUInt32(loader, FinalImageConfigOffset + 0x14));
+        Assert.Equal(0x80008000U, ReadBigEndianUInt32(loader, FinalImageConfigOffset + 0x18));
+        Assert.Equal(0x80U, ReadBigEndianUInt32(loader, FinalImageConfigOffset + 0x1C));
+        Assert.Equal(0x80006000U, ReadBigEndianUInt32(loader, FinalImageConfigOffset + 0x30));
+        Assert.Equal(0x40U, ReadBigEndianUInt32(loader, FinalImageConfigOffset + 0x34));
+        Assert.Equal((dolOffset + 0x100) >> 2, ReadBigEndianUInt32(loader, FinalImageConfigOffset + 0x38));
+        Assert.Equal(0x80007000U, ReadBigEndianUInt32(loader, FinalImageConfigOffset + 0x3C));
+        Assert.Equal(0x20U, ReadBigEndianUInt32(loader, FinalImageConfigOffset + 0x40));
+        Assert.Equal((dolOffset + 0x140) >> 2, ReadBigEndianUInt32(loader, FinalImageConfigOffset + 0x44));
+        Assert.NotEqual(ReadBigEndianUInt32(oldLoader, FinalImageConfigOffset + 0x30), ReadBigEndianUInt32(loader, FinalImageConfigOffset + 0x30));
+        Assert.Equal(ReadBigEndianUInt32(oldBoot, 0x424) + 0x40, ReadBigEndianUInt32(boot, 0x424));
+        Assert.Equal(ReadBigEndianUInt32(boot, 0x424) >> 2, ReadBigEndianUInt32(loader, FinalImageConfigOffset + 0x2C));
+        Assert.Equal(ReadBigEndianUInt32(boot, 0x428), ReadBigEndianUInt32(loader, FinalImageConfigOffset + 0x28));
+        Assert.Equal(changedDol, File.ReadAllBytes(Path.Combine(discRoot, "sys", "main.dol")));
+        Assert.Equal("RDEE01", System.Text.Encoding.ASCII.GetString(boot, 0, 6));
+        Assert.Equal("selected-scene", File.ReadAllText(Path.Combine(discRoot, "files", "scene.hasset")));
+    }
+
+    /// <summary>
     /// Writes one minimal fake DOL with a single loadable section and caller-specified payload size.
     /// </summary>
     /// <param name="path">Path of the fake DOL to write.</param>

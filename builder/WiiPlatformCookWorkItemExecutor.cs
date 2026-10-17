@@ -54,7 +54,8 @@ public sealed class WiiPlatformCookWorkItemExecutor {
         foreach (PlatformCookWorkItem item in workItems) {
             cancellationToken.ThrowIfCancellationRequested();
             if (!string.Equals(item.TargetPlatformId, "wii", StringComparison.OrdinalIgnoreCase) ||
-                !string.Equals(item.TargetArtifactKind, "runtime-texture", StringComparison.OrdinalIgnoreCase) ||
+                (!string.Equals(item.TargetArtifactKind, "runtime-texture", StringComparison.OrdinalIgnoreCase) &&
+                    !(string.Equals(item.SourceAssetKind, "font-atlas-texture", StringComparison.OrdinalIgnoreCase) && string.Equals(item.TargetArtifactKind, "runtime-font-atlas-texture", StringComparison.OrdinalIgnoreCase))) ||
                 (!string.Equals(item.SourceAssetKind, "texture", StringComparison.OrdinalIgnoreCase) && !string.Equals(item.SourceAssetKind, "font-atlas-texture", StringComparison.OrdinalIgnoreCase))) {
                 throw new InvalidOperationException($"Unsupported Wii cook contract '{item.WorkItemId}'.");
             }
