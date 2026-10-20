@@ -53,7 +53,7 @@ public sealed class WiiPlatformAssetBuilderTests {
                 ["vertex-color-mode"] = "ignore",
                 ["base-color"] = "#804020FF",
                 ["lighting-mode"] = "unlit"
-            });
+            }, numericPolicy: global::helengine.NumericPrecisionPolicy.Default);
 
         var result = builder.CookMaterial(request);
 
