@@ -2,6 +2,9 @@ namespace helengine.wii.builder;
 
 /// <summary>Validates texture and manifest destinations before any Wii staging output is replaced.</summary>
 internal static class WiiTextureCookPath {
+    /// <summary>Preserves the documented Windows-compatible filename contract even when the builder runs on macOS or Linux.</summary>
+    const string PortableInvalidFileNameCharacters = "<>:\"|?*";
+
     /// <summary>Rejects a staging root or ancestor that is a file or filesystem link before a workspace can reset the tree.</summary>
     public static void ValidateRoot(string root) {
         string current = Path.GetFullPath(root);
@@ -22,7 +25,7 @@ internal static class WiiTextureCookPath {
             bool device = stem.Equals("CON", StringComparison.OrdinalIgnoreCase) || stem.Equals("PRN", StringComparison.OrdinalIgnoreCase) ||
                 stem.Equals("AUX", StringComparison.OrdinalIgnoreCase) || stem.Equals("NUL", StringComparison.OrdinalIgnoreCase) ||
                 (stem.Length == 4 && (stem.StartsWith("COM", StringComparison.OrdinalIgnoreCase) || stem.StartsWith("LPT", StringComparison.OrdinalIgnoreCase)) && stem[3] >= '1' && stem[3] <= '9');
-            if (segment == "." || segment == ".." || segment.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || device || segment.EndsWith('.') || segment.EndsWith(' ')) throw new InvalidOperationException($"Unsafe Wii cooked path '{path}'.");
+            if (segment == "." || segment == ".." || segment.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || segment.Any(character => character < ' ' || PortableInvalidFileNameCharacters.Contains(character)) || device || segment.EndsWith('.') || segment.EndsWith(' ')) throw new InvalidOperationException($"Unsafe Wii cooked path '{path}'.");
         }
         if (segments.Length == 0) throw new InvalidOperationException("Wii cooked path is empty.");
         return string.Join('/', segments);

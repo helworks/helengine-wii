@@ -98,6 +98,12 @@ public sealed class WiiNativeTextureWorkItemTests : IDisposable {
     [InlineData("bad.hetex:stream")]
     [InlineData("NUL.hetex")]
     [InlineData("bad?.hetex")]
+    [InlineData("bad|.hetex")]
+    [InlineData("bad<.hetex")]
+    [InlineData("bad>.hetex")]
+    [InlineData("bad*.hetex")]
+    [InlineData("bad\".hetex")]
+    [InlineData("bad\u0001.hetex")]
     public void UnsafePathsPreservePreviousOutputs(string path) {
         Assert.Throws<InvalidOperationException>(() => new WiiPlatformCookWorkItemExecutor().Execute([Item("first.hetex"), Item(path)], Root, Stage));
         Assert.False(File.Exists(Path.Combine(Stage, "first.hetex")));
