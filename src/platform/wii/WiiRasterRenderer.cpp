@@ -197,17 +197,17 @@ namespace {
         SYS_Report(
             "[Wii][MatrixProbe] %s [%.6f %.6f %.6f %.6f] [%.6f %.6f %.6f %.6f] [%.6f %.6f %.6f %.6f] [%.6f %.6f %.6f %.6f]\n",
             label,
-            matrix.M11, matrix.M12, matrix.M13, matrix.M14,
-            matrix.M21, matrix.M22, matrix.M23, matrix.M24,
-            matrix.M31, matrix.M32, matrix.M33, matrix.M34,
-            matrix.M41, matrix.M42, matrix.M43, matrix.M44);
+            static_cast<double>(RealEvaluation(matrix.M11)), static_cast<double>(RealEvaluation(matrix.M12)), static_cast<double>(RealEvaluation(matrix.M13)), static_cast<double>(RealEvaluation(matrix.M14)),
+            static_cast<double>(RealEvaluation(matrix.M21)), static_cast<double>(RealEvaluation(matrix.M22)), static_cast<double>(RealEvaluation(matrix.M23)), static_cast<double>(RealEvaluation(matrix.M24)),
+            static_cast<double>(RealEvaluation(matrix.M31)), static_cast<double>(RealEvaluation(matrix.M32)), static_cast<double>(RealEvaluation(matrix.M33)), static_cast<double>(RealEvaluation(matrix.M34)),
+            static_cast<double>(RealEvaluation(matrix.M41)), static_cast<double>(RealEvaluation(matrix.M42)), static_cast<double>(RealEvaluation(matrix.M43)), static_cast<double>(RealEvaluation(matrix.M44)));
         AppendRasterTrace(
             "[Wii][MatrixProbe] %s [%.6f %.6f %.6f %.6f] [%.6f %.6f %.6f %.6f] [%.6f %.6f %.6f %.6f] [%.6f %.6f %.6f %.6f]\n",
             label,
-            matrix.M11, matrix.M12, matrix.M13, matrix.M14,
-            matrix.M21, matrix.M22, matrix.M23, matrix.M24,
-            matrix.M31, matrix.M32, matrix.M33, matrix.M34,
-            matrix.M41, matrix.M42, matrix.M43, matrix.M44);
+            static_cast<double>(RealEvaluation(matrix.M11)), static_cast<double>(RealEvaluation(matrix.M12)), static_cast<double>(RealEvaluation(matrix.M13)), static_cast<double>(RealEvaluation(matrix.M14)),
+            static_cast<double>(RealEvaluation(matrix.M21)), static_cast<double>(RealEvaluation(matrix.M22)), static_cast<double>(RealEvaluation(matrix.M23)), static_cast<double>(RealEvaluation(matrix.M24)),
+            static_cast<double>(RealEvaluation(matrix.M31)), static_cast<double>(RealEvaluation(matrix.M32)), static_cast<double>(RealEvaluation(matrix.M33)), static_cast<double>(RealEvaluation(matrix.M34)),
+            static_cast<double>(RealEvaluation(matrix.M41)), static_cast<double>(RealEvaluation(matrix.M42)), static_cast<double>(RealEvaluation(matrix.M43)), static_cast<double>(RealEvaluation(matrix.M44)));
     }
 
     void ReportMtx(const char* label, const Mtx& matrix) {
@@ -265,12 +265,12 @@ namespace helengine::wii {
 
         CameraClearSettings clearSettings = framePlan->Camera->get_ClearSettings();
         GX_SetCopyClear(ResolveClearColor(clearSettings), ResolveClearDepth(clearSettings));
-        GX_SetViewport(framePlan->PhysicalViewport.X, framePlan->PhysicalViewport.Y, framePlan->PhysicalViewport.Z, framePlan->PhysicalViewport.W, 0.0f, 1.0f);
+        GX_SetViewport(static_cast<float>(RealEvaluation(framePlan->PhysicalViewport.X)), static_cast<float>(RealEvaluation(framePlan->PhysicalViewport.Y)), static_cast<float>(RealEvaluation(framePlan->PhysicalViewport.Z)), static_cast<float>(RealEvaluation(framePlan->PhysicalViewport.W)), 0.0f, 1.0f);
         GX_SetScissor(
-            static_cast<u32>(framePlan->PhysicalViewport.X),
-            static_cast<u32>(framePlan->PhysicalViewport.Y),
-            static_cast<u32>(framePlan->PhysicalViewport.Z),
-            static_cast<u32>(framePlan->PhysicalViewport.W));
+            static_cast<u32>(static_cast<int32_t>(RealEvaluation(framePlan->PhysicalViewport.X))),
+            static_cast<u32>(static_cast<int32_t>(RealEvaluation(framePlan->PhysicalViewport.Y))),
+            static_cast<u32>(static_cast<int32_t>(RealEvaluation(framePlan->PhysicalViewport.Z))),
+            static_cast<u32>(static_cast<int32_t>(RealEvaluation(framePlan->PhysicalViewport.W))));
         GX_InvVtxCache();
 
         Mtx44 projectionMatrix;
@@ -403,10 +403,10 @@ namespace helengine::wii {
 
         float4 color = clearSettings.get_ClearColor();
         return GXColor {
-            static_cast<u8>(std::clamp(color.X, 0.0f, 1.0f) * 255.0f),
-            static_cast<u8>(std::clamp(color.Y, 0.0f, 1.0f) * 255.0f),
-            static_cast<u8>(std::clamp(color.Z, 0.0f, 1.0f) * 255.0f),
-            static_cast<u8>(std::clamp(color.W, 0.0f, 1.0f) * 255.0f)
+            static_cast<u8>(static_cast<int32_t>(RealMath::Clamp(color.X, 0.0f, 1.0f) * 255.0f)),
+            static_cast<u8>(static_cast<int32_t>(RealMath::Clamp(color.Y, 0.0f, 1.0f) * 255.0f)),
+            static_cast<u8>(static_cast<int32_t>(RealMath::Clamp(color.Z, 0.0f, 1.0f) * 255.0f)),
+            static_cast<u8>(static_cast<int32_t>(RealMath::Clamp(color.W, 0.0f, 1.0f) * 255.0f))
         };
     }
 
@@ -416,43 +416,43 @@ namespace helengine::wii {
             return 0x00FFFFFF;
         }
 
-        return static_cast<uint32_t>(clearSettings.get_ClearDepth() * 16777215.0f);
+        return static_cast<uint32_t>(static_cast<int32_t>(clearSettings.get_ClearDepth() * 16777215.0f));
     }
 
     /// Copies one generated affine matrix directly into a GX position matrix without runtime reinterpretation.
     void WiiRasterRenderer::CopyAffineMatrixToGx(const float4x4& source, Mtx& destination) {
-        destination[0][0] = source.M11;
-        destination[0][1] = source.M21;
-        destination[0][2] = source.M31;
-        destination[0][3] = source.M41;
-        destination[1][0] = source.M12;
-        destination[1][1] = source.M22;
-        destination[1][2] = source.M32;
-        destination[1][3] = source.M42;
-        destination[2][0] = source.M13;
-        destination[2][1] = source.M23;
-        destination[2][2] = source.M33;
-        destination[2][3] = source.M43;
+        destination[0][0] = static_cast<float>(RealEvaluation(source.M11));
+        destination[0][1] = static_cast<float>(RealEvaluation(source.M21));
+        destination[0][2] = static_cast<float>(RealEvaluation(source.M31));
+        destination[0][3] = static_cast<float>(RealEvaluation(source.M41));
+        destination[1][0] = static_cast<float>(RealEvaluation(source.M12));
+        destination[1][1] = static_cast<float>(RealEvaluation(source.M22));
+        destination[1][2] = static_cast<float>(RealEvaluation(source.M32));
+        destination[1][3] = static_cast<float>(RealEvaluation(source.M42));
+        destination[2][0] = static_cast<float>(RealEvaluation(source.M13));
+        destination[2][1] = static_cast<float>(RealEvaluation(source.M23));
+        destination[2][2] = static_cast<float>(RealEvaluation(source.M33));
+        destination[2][3] = static_cast<float>(RealEvaluation(source.M43));
     }
 
     /// Copies one generated projection matrix into the GX projection upload layout.
     void WiiRasterRenderer::CopyProjectionMatrixToGx(const float4x4& source, Mtx44& destination) {
-        destination[0][0] = source.M11;
-        destination[0][1] = source.M21;
-        destination[0][2] = source.M31;
-        destination[0][3] = source.M41;
-        destination[1][0] = source.M12;
-        destination[1][1] = source.M22;
-        destination[1][2] = source.M32;
-        destination[1][3] = source.M42;
-        destination[2][0] = source.M13;
-        destination[2][1] = source.M23;
-        destination[2][2] = source.M33 + 1.0f;
-        destination[2][3] = source.M43;
-        destination[3][0] = source.M14;
-        destination[3][1] = source.M24;
-        destination[3][2] = source.M34;
-        destination[3][3] = source.M44;
+        destination[0][0] = static_cast<float>(RealEvaluation(source.M11));
+        destination[0][1] = static_cast<float>(RealEvaluation(source.M21));
+        destination[0][2] = static_cast<float>(RealEvaluation(source.M31));
+        destination[0][3] = static_cast<float>(RealEvaluation(source.M41));
+        destination[1][0] = static_cast<float>(RealEvaluation(source.M12));
+        destination[1][1] = static_cast<float>(RealEvaluation(source.M22));
+        destination[1][2] = static_cast<float>(RealEvaluation(source.M32));
+        destination[1][3] = static_cast<float>(RealEvaluation(source.M42));
+        destination[2][0] = static_cast<float>(RealEvaluation(source.M13));
+        destination[2][1] = static_cast<float>(RealEvaluation(source.M23));
+        destination[2][2] = static_cast<float>(RealEvaluation(source.M33 + 1.0f));
+        destination[2][3] = static_cast<float>(RealEvaluation(source.M43));
+        destination[3][0] = static_cast<float>(RealEvaluation(source.M14));
+        destination[3][1] = static_cast<float>(RealEvaluation(source.M24));
+        destination[3][2] = static_cast<float>(RealEvaluation(source.M34));
+        destination[3][3] = static_cast<float>(RealEvaluation(source.M44));
     }
 
     /// Configures one GX directional-light state block from the extracted render-frame lighting inputs.
@@ -509,41 +509,41 @@ namespace helengine::wii {
             SYS_Report(
                 "[Wii] Lighting state: frameLights=%ld ambientRgb=(%.3f, %.3f, %.3f) ambientGx=(%u, %u, %u) hasDirectional=%d directionalRgb=(%.3f, %.3f, %.3f) directionalView=(%.3f, %.3f, %.3f) directionalPos=(%.3f, %.3f, %.3f)\n",
                 static_cast<long>(framePlan->LightSubmissions->get_Count()),
-                ambientRgb.X,
-                ambientRgb.Y,
-                ambientRgb.Z,
+                static_cast<double>(RealEvaluation(ambientRgb.X)),
+                static_cast<double>(RealEvaluation(ambientRgb.Y)),
+                static_cast<double>(RealEvaluation(ambientRgb.Z)),
                 static_cast<unsigned int>(ambientColor.r),
                 static_cast<unsigned int>(ambientColor.g),
                 static_cast<unsigned int>(ambientColor.b),
                 hasDirectionalLight ? 1 : 0,
-                directionalRgb.X,
-                directionalRgb.Y,
-                directionalRgb.Z,
-                directionalDirection.X,
-                directionalDirection.Y,
-                directionalDirection.Z,
-                directionalPosition.X,
-                directionalPosition.Y,
-                directionalPosition.Z);
+                static_cast<double>(RealEvaluation(directionalRgb.X)),
+                static_cast<double>(RealEvaluation(directionalRgb.Y)),
+                static_cast<double>(RealEvaluation(directionalRgb.Z)),
+                static_cast<double>(RealEvaluation(directionalDirection.X)),
+                static_cast<double>(RealEvaluation(directionalDirection.Y)),
+                static_cast<double>(RealEvaluation(directionalDirection.Z)),
+                static_cast<double>(RealEvaluation(directionalPosition.X)),
+                static_cast<double>(RealEvaluation(directionalPosition.Y)),
+                static_cast<double>(RealEvaluation(directionalPosition.Z)));
             AppendRasterTrace(
                 "[Wii] Lighting state: frameLights=%ld ambientRgb=(%.3f, %.3f, %.3f) ambientGx=(%u, %u, %u) hasDirectional=%d directionalRgb=(%.3f, %.3f, %.3f) directionalView=(%.3f, %.3f, %.3f) directionalPos=(%.3f, %.3f, %.3f)\n",
                 static_cast<long>(framePlan->LightSubmissions->get_Count()),
-                ambientRgb.X,
-                ambientRgb.Y,
-                ambientRgb.Z,
+                static_cast<double>(RealEvaluation(ambientRgb.X)),
+                static_cast<double>(RealEvaluation(ambientRgb.Y)),
+                static_cast<double>(RealEvaluation(ambientRgb.Z)),
                 static_cast<unsigned int>(ambientColor.r),
                 static_cast<unsigned int>(ambientColor.g),
                 static_cast<unsigned int>(ambientColor.b),
                 hasDirectionalLight ? 1 : 0,
-                directionalRgb.X,
-                directionalRgb.Y,
-                directionalRgb.Z,
-                directionalDirection.X,
-                directionalDirection.Y,
-                directionalDirection.Z,
-                directionalPosition.X,
-                directionalPosition.Y,
-                directionalPosition.Z);
+                static_cast<double>(RealEvaluation(directionalRgb.X)),
+                static_cast<double>(RealEvaluation(directionalRgb.Y)),
+                static_cast<double>(RealEvaluation(directionalRgb.Z)),
+                static_cast<double>(RealEvaluation(directionalDirection.X)),
+                static_cast<double>(RealEvaluation(directionalDirection.Y)),
+                static_cast<double>(RealEvaluation(directionalDirection.Z)),
+                static_cast<double>(RealEvaluation(directionalPosition.X)),
+                static_cast<double>(RealEvaluation(directionalPosition.Y)),
+                static_cast<double>(RealEvaluation(directionalPosition.Z)));
         }
 
         if (!hasDirectionalLight) {
@@ -553,7 +553,7 @@ namespace helengine::wii {
             return;
         }
 
-        GX_InitLightPos(&lightObject, directionalPosition.X, directionalPosition.Y, directionalPosition.Z);
+        GX_InitLightPos(&lightObject, static_cast<float>(RealEvaluation(directionalPosition.X)), static_cast<float>(RealEvaluation(directionalPosition.Y)), static_cast<float>(RealEvaluation(directionalPosition.Z)));
         GX_InitLightColor(&lightObject, ConvertLightingColorToGx(directionalRgb));
         GX_LoadLightObj(&lightObject, GX_LIGHT0);
     }
@@ -570,10 +570,10 @@ namespace helengine::wii {
 
         const float4 entityOrientation = entity->get_Orientation();
         const bool isIdentityOrientation =
-            std::fabs(entityOrientation.X) < 0.0001f &&
-            std::fabs(entityOrientation.Y) < 0.0001f &&
-            std::fabs(entityOrientation.Z) < 0.0001f &&
-            std::fabs(entityOrientation.W - 1.0f) < 0.0001f;
+            RealMath::Abs(entityOrientation.X) < 0.0001f &&
+            RealMath::Abs(entityOrientation.Y) < 0.0001f &&
+            RealMath::Abs(entityOrientation.Z) < 0.0001f &&
+            RealMath::Abs(entityOrientation.W - 1.0f) < 0.0001f;
         if (isIdentityOrientation) {
             return;
         }
@@ -592,39 +592,39 @@ namespace helengine::wii {
         Mtx nativeModelViewMatrix;
         BuildNativeModelViewMatrix(framePlan->Camera, entity, nativeModelViewMatrix);
         Mtx44 nativeProjectionMatrix;
-        const float viewportHeight = framePlan->LogicalViewport.W > 0.0f ? framePlan->LogicalViewport.W : 1.0f;
-        const float aspectRatio = framePlan->LogicalViewport.Z / viewportHeight;
+        const RealEvaluation viewportHeight = framePlan->LogicalViewport.W > 0.0f ? RealEvaluation(framePlan->LogicalViewport.W) : RealEvaluation(1.0f);
+        const RealEvaluation aspectRatio = framePlan->LogicalViewport.Z / viewportHeight;
         guPerspective(
             nativeProjectionMatrix,
             45.0f,
-            aspectRatio,
-            framePlan->Camera->get_NearPlaneDistance(),
-            framePlan->Camera->get_FarPlaneDistance());
+            static_cast<float>(aspectRatio),
+            static_cast<float>(RealEvaluation(framePlan->Camera->get_NearPlaneDistance())),
+            static_cast<float>(RealEvaluation(framePlan->Camera->get_FarPlaneDistance())));
 
         SYS_Report(
             "[Wii][MatrixProbe] entityPos=(%.6f, %.6f, %.6f) entityScale=(%.6f, %.6f, %.6f) entityRot=(%.6f, %.6f, %.6f, %.6f)\n",
-            entity->get_Position().X,
-            entity->get_Position().Y,
-            entity->get_Position().Z,
-            entity->get_Scale().X,
-            entity->get_Scale().Y,
-            entity->get_Scale().Z,
-            entityOrientation.X,
-            entityOrientation.Y,
-            entityOrientation.Z,
-            entityOrientation.W);
+            static_cast<double>(RealEvaluation(entity->get_Position().X)),
+            static_cast<double>(RealEvaluation(entity->get_Position().Y)),
+            static_cast<double>(RealEvaluation(entity->get_Position().Z)),
+            static_cast<double>(RealEvaluation(entity->get_Scale().X)),
+            static_cast<double>(RealEvaluation(entity->get_Scale().Y)),
+            static_cast<double>(RealEvaluation(entity->get_Scale().Z)),
+            static_cast<double>(RealEvaluation(entityOrientation.X)),
+            static_cast<double>(RealEvaluation(entityOrientation.Y)),
+            static_cast<double>(RealEvaluation(entityOrientation.Z)),
+            static_cast<double>(RealEvaluation(entityOrientation.W)));
         AppendRasterTrace(
             "[Wii][MatrixProbe] entityPos=(%.6f, %.6f, %.6f) entityScale=(%.6f, %.6f, %.6f) entityRot=(%.6f, %.6f, %.6f, %.6f)\n",
-            entity->get_Position().X,
-            entity->get_Position().Y,
-            entity->get_Position().Z,
-            entity->get_Scale().X,
-            entity->get_Scale().Y,
-            entity->get_Scale().Z,
-            entityOrientation.X,
-            entityOrientation.Y,
-            entityOrientation.Z,
-            entityOrientation.W);
+            static_cast<double>(RealEvaluation(entity->get_Position().X)),
+            static_cast<double>(RealEvaluation(entity->get_Position().Y)),
+            static_cast<double>(RealEvaluation(entity->get_Position().Z)),
+            static_cast<double>(RealEvaluation(entity->get_Scale().X)),
+            static_cast<double>(RealEvaluation(entity->get_Scale().Y)),
+            static_cast<double>(RealEvaluation(entity->get_Scale().Z)),
+            static_cast<double>(RealEvaluation(entityOrientation.X)),
+            static_cast<double>(RealEvaluation(entityOrientation.Y)),
+            static_cast<double>(RealEvaluation(entityOrientation.Z)),
+            static_cast<double>(RealEvaluation(entityOrientation.W)));
         ReportFloat4x4("generated.view", framePlan->View);
         ReportMtx("native.view", nativeViewMatrix);
         ReportFloat4x4("generated.projection", framePlan->Projection);
@@ -654,9 +654,9 @@ namespace helengine::wii {
         float3 cameraForward = float4::RotateVector(float3(0.0f, 0.0f, -1.0f), cameraOrientation);
         float3 cameraUp = float4::RotateVector(float3(0.0f, 1.0f, 0.0f), cameraOrientation);
         float3 cameraTarget = cameraPosition + cameraForward;
-        guVector nativeCameraPosition = { cameraPosition.X, cameraPosition.Y, cameraPosition.Z };
-        guVector nativeCameraUp = { cameraUp.X, cameraUp.Y, cameraUp.Z };
-        guVector nativeCameraTarget = { cameraTarget.X, cameraTarget.Y, cameraTarget.Z };
+        guVector nativeCameraPosition = { static_cast<float>(RealEvaluation(cameraPosition.X)), static_cast<float>(RealEvaluation(cameraPosition.Y)), static_cast<float>(RealEvaluation(cameraPosition.Z)) };
+        guVector nativeCameraUp = { static_cast<float>(RealEvaluation(cameraUp.X)), static_cast<float>(RealEvaluation(cameraUp.Y)), static_cast<float>(RealEvaluation(cameraUp.Z)) };
+        guVector nativeCameraTarget = { static_cast<float>(RealEvaluation(cameraTarget.X)), static_cast<float>(RealEvaluation(cameraTarget.Y)), static_cast<float>(RealEvaluation(cameraTarget.Z)) };
         guLookAt(viewMatrix, &nativeCameraPosition, &nativeCameraUp, &nativeCameraTarget);
     }
 
@@ -670,28 +670,28 @@ namespace helengine::wii {
         float4 entityOrientation = entity->get_Orientation();
         float3 entityPosition = entity->get_Position();
         entityOrientation.Normalize();
-        const float xx = entityOrientation.X * entityOrientation.X;
-        const float yy = entityOrientation.Y * entityOrientation.Y;
-        const float zz = entityOrientation.Z * entityOrientation.Z;
-        const float xy = entityOrientation.X * entityOrientation.Y;
-        const float xz = entityOrientation.X * entityOrientation.Z;
-        const float yz = entityOrientation.Y * entityOrientation.Z;
-        const float xw = entityOrientation.X * entityOrientation.W;
-        const float yw = entityOrientation.Y * entityOrientation.W;
-        const float zw = entityOrientation.Z * entityOrientation.W;
+        const RealEvaluation xx = entityOrientation.X * entityOrientation.X;
+        const RealEvaluation yy = entityOrientation.Y * entityOrientation.Y;
+        const RealEvaluation zz = entityOrientation.Z * entityOrientation.Z;
+        const RealEvaluation xy = entityOrientation.X * entityOrientation.Y;
+        const RealEvaluation xz = entityOrientation.X * entityOrientation.Z;
+        const RealEvaluation yz = entityOrientation.Y * entityOrientation.Z;
+        const RealEvaluation xw = entityOrientation.X * entityOrientation.W;
+        const RealEvaluation yw = entityOrientation.Y * entityOrientation.W;
+        const RealEvaluation zw = entityOrientation.Z * entityOrientation.W;
 
-        modelMatrix[0][0] = (1.0f - (2.0f * (yy + zz))) * entityScale.X;
-        modelMatrix[0][1] = (2.0f * (xy + zw)) * entityScale.X;
-        modelMatrix[0][2] = (2.0f * (xz - yw)) * entityScale.X;
-        modelMatrix[0][3] = entityPosition.X;
-        modelMatrix[1][0] = (2.0f * (xy - zw)) * entityScale.Y;
-        modelMatrix[1][1] = (1.0f - (2.0f * (zz + xx))) * entityScale.Y;
-        modelMatrix[1][2] = (2.0f * (yz + xw)) * entityScale.Y;
-        modelMatrix[1][3] = entityPosition.Y;
-        modelMatrix[2][0] = (2.0f * (xz + yw)) * entityScale.Z;
-        modelMatrix[2][1] = (2.0f * (yz - xw)) * entityScale.Z;
-        modelMatrix[2][2] = (1.0f - (2.0f * (yy + xx))) * entityScale.Z;
-        modelMatrix[2][3] = entityPosition.Z;
+        modelMatrix[0][0] = static_cast<float>(RealEvaluation((1.0f - (2.0f * (yy + zz))) * entityScale.X));
+        modelMatrix[0][1] = static_cast<float>(RealEvaluation((2.0f * (xy + zw)) * entityScale.X));
+        modelMatrix[0][2] = static_cast<float>(RealEvaluation((2.0f * (xz - yw)) * entityScale.X));
+        modelMatrix[0][3] = static_cast<float>(RealEvaluation(entityPosition.X));
+        modelMatrix[1][0] = static_cast<float>(RealEvaluation((2.0f * (xy - zw)) * entityScale.Y));
+        modelMatrix[1][1] = static_cast<float>(RealEvaluation((1.0f - (2.0f * (zz + xx))) * entityScale.Y));
+        modelMatrix[1][2] = static_cast<float>(RealEvaluation((2.0f * (yz + xw)) * entityScale.Y));
+        modelMatrix[1][3] = static_cast<float>(RealEvaluation(entityPosition.Y));
+        modelMatrix[2][0] = static_cast<float>(RealEvaluation((2.0f * (xz + yw)) * entityScale.Z));
+        modelMatrix[2][1] = static_cast<float>(RealEvaluation((2.0f * (yz - xw)) * entityScale.Z));
+        modelMatrix[2][2] = static_cast<float>(RealEvaluation((1.0f - (2.0f * (yy + xx))) * entityScale.Z));
+        modelMatrix[2][3] = static_cast<float>(RealEvaluation(entityPosition.Z));
     }
 
     /// Builds one native GX model-view matrix through libogc matrix concatenation.
@@ -779,9 +779,9 @@ namespace helengine::wii {
     /// Converts a normalized RGB lighting value into a GX color with full alpha.
     GXColor WiiRasterRenderer::ConvertLightingColorToGx(float3 color) {
         return GXColor {
-            static_cast<u8>(std::clamp(color.X, 0.0f, 1.0f) * 255.0f),
-            static_cast<u8>(std::clamp(color.Y, 0.0f, 1.0f) * 255.0f),
-            static_cast<u8>(std::clamp(color.Z, 0.0f, 1.0f) * 255.0f),
+            static_cast<u8>(static_cast<int32_t>(RealMath::Clamp(color.X, 0.0f, 1.0f) * 255.0f)),
+            static_cast<u8>(static_cast<int32_t>(RealMath::Clamp(color.Y, 0.0f, 1.0f) * 255.0f)),
+            static_cast<u8>(static_cast<int32_t>(RealMath::Clamp(color.Z, 0.0f, 1.0f) * 255.0f)),
             0xFF
         };
     }
@@ -805,15 +805,15 @@ namespace helengine::wii {
         float4 entityOrientation = entity->get_Orientation();
         float3 entityPosition = entity->get_Position();
         entityOrientation.Normalize();
-        const float xx = entityOrientation.X * entityOrientation.X;
-        const float yy = entityOrientation.Y * entityOrientation.Y;
-        const float zz = entityOrientation.Z * entityOrientation.Z;
-        const float xy = entityOrientation.X * entityOrientation.Y;
-        const float xz = entityOrientation.X * entityOrientation.Z;
-        const float yz = entityOrientation.Y * entityOrientation.Z;
-        const float xw = entityOrientation.X * entityOrientation.W;
-        const float yw = entityOrientation.Y * entityOrientation.W;
-        const float zw = entityOrientation.Z * entityOrientation.W;
+        const RealEvaluation xx = entityOrientation.X * entityOrientation.X;
+        const RealEvaluation yy = entityOrientation.Y * entityOrientation.Y;
+        const RealEvaluation zz = entityOrientation.Z * entityOrientation.Z;
+        const RealEvaluation xy = entityOrientation.X * entityOrientation.Y;
+        const RealEvaluation xz = entityOrientation.X * entityOrientation.Z;
+        const RealEvaluation yz = entityOrientation.Y * entityOrientation.Z;
+        const RealEvaluation xw = entityOrientation.X * entityOrientation.W;
+        const RealEvaluation yw = entityOrientation.Y * entityOrientation.W;
+        const RealEvaluation zw = entityOrientation.Z * entityOrientation.W;
 
         worldMatrix.M11 = (1.0f - (2.0f * (yy + zz))) * entityScale.X;
         worldMatrix.M12 = (2.0f * (xy + zw)) * entityScale.X;
@@ -893,7 +893,7 @@ namespace helengine::wii {
             if (useTexturedBranch) {
                 const WiiPackedTexCoord2 packedTextureCoordinate = (*cachedMeshData->PackedTexCoords)[cachedIndex];
                 const float2 textureCoordinate(packedTextureCoordinate.U, packedTextureCoordinate.V);
-                GX_TexCoord2f32(textureCoordinate.X, textureCoordinate.Y);
+                GX_TexCoord2f32(static_cast<float>(RealEvaluation(textureCoordinate.X)), static_cast<float>(RealEvaluation(textureCoordinate.Y)));
             }
         }
         GX_End();
@@ -935,9 +935,9 @@ namespace helengine::wii {
             HasLoggedFirstLitDraw = true;
             SYS_Report(
                 "[Wii] First lit draw: baseColor=(%.3f, %.3f, %.3f) textured=%d hasDirectional=%d ambientGx=(%u, %u, %u) indices=%ld\n",
-                baseColor.X,
-                baseColor.Y,
-                baseColor.Z,
+                static_cast<double>(RealEvaluation(baseColor.X)),
+                static_cast<double>(RealEvaluation(baseColor.Y)),
+                static_cast<double>(RealEvaluation(baseColor.Z)),
                 useTexturedBranch ? 1 : 0,
                 hasDirectionalLight ? 1 : 0,
                 static_cast<unsigned int>(ambientColor.r),
@@ -946,9 +946,9 @@ namespace helengine::wii {
                 static_cast<long>(indexCount));
             AppendRasterTrace(
                 "[Wii] First lit draw: baseColor=(%.3f, %.3f, %.3f) textured=%d hasDirectional=%d ambientGx=(%u, %u, %u) indices=%ld\n",
-                baseColor.X,
-                baseColor.Y,
-                baseColor.Z,
+                static_cast<double>(RealEvaluation(baseColor.X)),
+                static_cast<double>(RealEvaluation(baseColor.Y)),
+                static_cast<double>(RealEvaluation(baseColor.Z)),
                 useTexturedBranch ? 1 : 0,
                 hasDirectionalLight ? 1 : 0,
                 static_cast<unsigned int>(ambientColor.r),
@@ -965,7 +965,7 @@ namespace helengine::wii {
             if (useTexturedBranch) {
                 const WiiPackedTexCoord2 packedTextureCoordinate = (*cachedMeshData->PackedTexCoords)[cachedIndex];
                 const float2 textureCoordinate(packedTextureCoordinate.U, packedTextureCoordinate.V);
-                GX_TexCoord2f32(textureCoordinate.X, textureCoordinate.Y);
+                GX_TexCoord2f32(static_cast<float>(RealEvaluation(textureCoordinate.X)), static_cast<float>(RealEvaluation(textureCoordinate.Y)));
             }
         }
         GX_End();
@@ -1065,9 +1065,9 @@ namespace helengine::wii {
                 cachedMeshData->Indices16 == nullptr ? 0L : static_cast<long>(cachedMeshData->Indices16->Length),
                 static_cast<long>(runtimeSubmesh->get_IndexStart()),
                 static_cast<long>(runtimeSubmesh->get_IndexCount()),
-                baseColor.X,
-                baseColor.Y,
-                baseColor.Z,
+                static_cast<double>(RealEvaluation(baseColor.X)),
+                static_cast<double>(RealEvaluation(baseColor.Y)),
+                static_cast<double>(RealEvaluation(baseColor.Z)),
                 wiiRuntimeMaterial->GetTextureRelativePath().c_str(),
                 static_cast<unsigned int>(firstIndex),
                 static_cast<unsigned int>(secondIndex),
@@ -1098,9 +1098,9 @@ namespace helengine::wii {
                 cachedMeshData->Indices16 == nullptr ? 0L : static_cast<long>(cachedMeshData->Indices16->Length),
                 static_cast<long>(runtimeSubmesh->get_IndexStart()),
                 static_cast<long>(runtimeSubmesh->get_IndexCount()),
-                baseColor.X,
-                baseColor.Y,
-                baseColor.Z,
+                static_cast<double>(RealEvaluation(baseColor.X)),
+                static_cast<double>(RealEvaluation(baseColor.Y)),
+                static_cast<double>(RealEvaluation(baseColor.Z)),
                 wiiRuntimeMaterial->GetTextureRelativePath().c_str(),
                 static_cast<unsigned int>(firstIndex),
                 static_cast<unsigned int>(secondIndex),
