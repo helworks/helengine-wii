@@ -116,70 +116,28 @@ public sealed class WiiPlatformCookWorkItemExecutor {
             return textureAsset;
         }
 
-        using Bitmap sourceBitmap = new Bitmap(ResolveBitmapSourcePath(sourcePath));
-        int width = sourceBitmap.Width;
-        int height = sourceBitmap.Height;
-        if (width < 1 || height < 1 || width > ushort.MaxValue || height > ushort.MaxValue) {
-            throw new InvalidOperationException($"Texture source '{workItem.SourceAssetPath}' produced unsupported dimensions '{width}x{height}'.");
+        string imagePath = ResolveImageSourcePath(sourcePath);
+        string extension = Path.GetExtension(imagePath);
+        TextureImporterRegistration registration = PortableImporterFactory.CreateDefault()
+            .OfType<TextureImporterRegistration>()
+            .FirstOrDefault(importer => importer.Extensions.Contains(extension, StringComparer.OrdinalIgnoreCase))
+            ?? throw new InvalidOperationException($"No portable texture importer supports source extension '{extension}'.");
+        using FileStream imageStream = File.OpenRead(imagePath);
+        using TextureAsset imported = registration.Importer.ImportTexture(imageStream)
+            ?? throw new InvalidOperationException($"Texture importer '{registration.ImporterId}' did not return a texture asset.");
+        if (imported.Width < 1 || imported.Height < 1) {
+            throw new InvalidOperationException($"Texture source '{workItem.SourceAssetPath}' must have positive dimensions.");
         }
-
-        Rectangle bounds = new Rectangle(0, 0, width, height);
-        using Bitmap bitmap = sourceBitmap.Clone(bounds, PixelFormat.Format32bppArgb);
-        BitmapData bitmapData = bitmap.LockBits(bounds, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
-        try {
-            byte[] colors = ReadBitmapColors(bitmapData, width, height);
-            return new TextureAsset {
-                Id = ResolveMetadataValue(workItem, "source-asset-id"),
-                Width = (ushort)width,
-                Height = (ushort)height,
-                Colors = colors,
-                PaletteColors = Array.Empty<byte>(),
-                ColorFormat = TextureAssetColorFormat.Rgba32,
-                AlphaPrecision = TextureAssetAlphaPrecision.A8
-            };
-        } finally {
-            bitmap.UnlockBits(bitmapData);
-        }
+        return new TextureAsset {
+            Id = ResolveMetadataValue(workItem, "source-asset-id"),
+            Width = imported.Width,
+            Height = imported.Height,
+            Colors = TextureAssetPixelCodec.DecodeToRgba32(imported),
+            PaletteColors = Array.Empty<byte>(),
+            ColorFormat = TextureAssetColorFormat.Rgba32,
+            AlphaPrecision = TextureAssetAlphaPrecision.A8
+        };
     }
-
-    /// <summary>
-    /// Reads the logical RGBA32 colors from one 32-bit ARGB bitmap lock.
-    /// </summary>
-    /// <param name="bitmapData">Locked bitmap payload.</param>
-    /// <param name="width">Bitmap width in pixels.</param>
-    /// <param name="height">Bitmap height in pixels.</param>
-    /// <returns>Tightly packed RGBA32 bytes.</returns>
-    static byte[] ReadBitmapColors(BitmapData bitmapData, int width, int height) {
-        if (bitmapData == null) {
-            throw new ArgumentNullException(nameof(bitmapData));
-        } else if (width < 1) {
-            throw new ArgumentOutOfRangeException(nameof(width), "Bitmap width must be positive.");
-        } else if (height < 1) {
-            throw new ArgumentOutOfRangeException(nameof(height), "Bitmap height must be positive.");
-        }
-
-        const int BytesPerPixel = 4;
-        int rowByteCount = width * BytesPerPixel;
-        byte[] colors = new byte[width * height * BytesPerPixel];
-        byte[] sourceRow = new byte[rowByteCount];
-        for (int rowIndex = 0; rowIndex < height; rowIndex++) {
-            IntPtr rowPointer = IntPtr.Add(bitmapData.Scan0, rowIndex * bitmapData.Stride);
-            Marshal.Copy(rowPointer, sourceRow, 0, rowByteCount);
-
-            int destinationRowOffset = rowIndex * rowByteCount;
-            for (int columnIndex = 0; columnIndex < width; columnIndex++) {
-                int sourceOffset = columnIndex * BytesPerPixel;
-                int destinationOffset = destinationRowOffset + sourceOffset;
-                colors[destinationOffset + 0] = sourceRow[sourceOffset + 2];
-                colors[destinationOffset + 1] = sourceRow[sourceOffset + 1];
-                colors[destinationOffset + 2] = sourceRow[sourceOffset + 0];
-                colors[destinationOffset + 3] = sourceRow[sourceOffset + 3];
-            }
-        }
-
-        return colors;
-    }
-
     /// <summary>
     /// Attempts to read one serialized texture asset from an authored HELE file path.
     /// </summary>
@@ -220,8 +178,8 @@ public sealed class WiiPlatformCookWorkItemExecutor {
     /// Resolves the bitmap source path that should be imported when one work-item source path is not a serialized texture asset.
     /// </summary>
     /// <param name="sourcePath">Absolute authored source path emitted by the editor work item.</param>
-    /// <returns>Absolute bitmap source path that System.Drawing can load.</returns>
-    static string ResolveBitmapSourcePath(string sourcePath) {
+    /// <returns>Absolute image source path supported by the portable importer registry.</returns>
+    static string ResolveImageSourcePath(string sourcePath) {
         if (string.IsNullOrWhiteSpace(sourcePath)) {
             throw new ArgumentException("Source path must be provided.", nameof(sourcePath));
         }

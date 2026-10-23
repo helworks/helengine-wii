@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net9.0-windows</TargetFramework>
+    <TargetFramework>net9.0</TargetFramework>
     <OutputType>Exe</OutputType>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>disable</Nullable>
@@ -10,14 +10,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="System.Drawing.Common" Version="9.0.11" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="$(HelEngineRoot)\engine\helengine.baseplatform\helengine.baseplatform.csproj" />
     <ProjectReference Include="$(HelEngineRoot)\engine\helengine.core\helengine.core.csproj" />
     <ProjectReference Include="$(HelEngineRoot)\engine\helengine.editor\helengine.editor.csproj" />
-    <ProjectReference Include="$(HelEngineRoot)\engine\helengine.editor.windows\helengine.editor.windows.csproj" />
+    <ProjectReference Include="$(HelEngineRoot)\engine\helengine.editor.portableimporter\helengine.editor.portableimporter.csproj" />
     <ProjectReference Include="$(HelEngineRoot)\engine\helengine.files\helengine.files.csproj" />
   </ItemGroup>
 </Project>
