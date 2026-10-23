@@ -62,7 +62,7 @@ namespace helengine::wii {
         }
 
         RenderFrameExtractionService extractor;
-        RenderFrameExtractionResult* extraction = extractor.Extract(cameras, drawables, lights, capabilities);
+        RenderFrameExtractionResult* extraction = extractor.Extract(cameras, drawables, lights, capabilities, true);
         RenderFrame* frame = extraction->get_Frames()->get_Item(0);
         float4 logicalViewport = CameraViewportResolver::ResolveViewport(camera->get_Viewport(), logicalWidth, logicalHeight);
         float4 physicalViewport = ResolvePhysicalViewport(logicalViewport, logicalWidth, logicalHeight, physicalWidth, physicalHeight);
@@ -128,8 +128,8 @@ namespace helengine::wii {
 
     /// Resolves the physical GX viewport from the logical viewport and current presented framebuffer dimensions.
     float4 WiiSceneRenderBridge::ResolvePhysicalViewport(const float4& logicalViewport, int32_t logicalWidth, int32_t logicalHeight, int32_t physicalWidth, int32_t physicalHeight) {
-        const float horizontalScale = static_cast<float>(physicalWidth) / static_cast<float>(logicalWidth);
-        const float verticalScale = static_cast<float>(physicalHeight) / static_cast<float>(logicalHeight);
+        const RealEvaluation horizontalScale = RealEvaluation(physicalWidth) / RealEvaluation(logicalWidth);
+        const RealEvaluation verticalScale = RealEvaluation(physicalHeight) / RealEvaluation(logicalHeight);
         return float4(
             logicalViewport.X * horizontalScale,
             logicalViewport.Y * verticalScale,
@@ -174,19 +174,19 @@ namespace helengine::wii {
     }
 
     /// Builds the authored perspective projection matrix using the same handwritten row-vector path as the GameCube backend.
-    float4x4 WiiSceneRenderBridge::BuildProjectionMatrix(CameraComponent* camera, float aspectRatio) {
+    float4x4 WiiSceneRenderBridge::BuildProjectionMatrix(CameraComponent* camera, RealEvaluation aspectRatio) {
         if (camera == nullptr) {
             throw new ArgumentNullException("camera");
         } else if (aspectRatio <= 0.0f) {
             throw new ArgumentOutOfRangeException("aspectRatio");
         }
 
-        const float fieldOfView = static_cast<float>(3.14159265358979323846 / 4.0);
-        const float nearPlaneDistance = camera->get_NearPlaneDistance();
-        const float farPlaneDistance = camera->get_FarPlaneDistance();
-        const float yScale = 1.0f / static_cast<float>(std::tan(static_cast<double>(fieldOfView) * 0.5));
-        const float xScale = yScale / aspectRatio;
-        const float negFarRange = farPlaneDistance / (nearPlaneDistance - farPlaneDistance);
+        const RealEvaluation fieldOfView = RealMath::get_PI() / 4.0f;
+        const RealEvaluation nearPlaneDistance = camera->get_NearPlaneDistance();
+        const RealEvaluation farPlaneDistance = camera->get_FarPlaneDistance();
+        const RealEvaluation yScale = 1.0f / RealMath::Tan(fieldOfView * 0.5f);
+        const RealEvaluation xScale = yScale / aspectRatio;
+        const RealEvaluation negFarRange = farPlaneDistance / (nearPlaneDistance - farPlaneDistance);
 
         float4x4 projection;
         projection.M11 = xScale;

@@ -2,6 +2,8 @@
 
 #include "runtime/native_list.hpp"
 
+struct RealEvaluation;
+
 class CameraComponent;
 class IDrawable3D;
 class RendererBackendCapabilityProfile;
@@ -34,7 +36,7 @@ namespace helengine::wii {
         float4x4 BuildViewMatrix(CameraComponent* camera);
 
         /// Builds the authored perspective projection matrix using the shared row-vector convention expected by the Wii raster path.
-        float4x4 BuildProjectionMatrix(CameraComponent* camera, float aspectRatio);
+        float4x4 BuildProjectionMatrix(CameraComponent* camera, RealEvaluation aspectRatio);
 
         /// Multiplies two row-vector matrices using the shared engine convention expected by the Wii frame plan.
         void MultiplyMatrices(const float4x4& left, const float4x4& right, float4x4& result);
