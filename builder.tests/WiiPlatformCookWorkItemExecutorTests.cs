@@ -11,8 +11,11 @@ public sealed class WiiPlatformCookWorkItemExecutorTests {
     /// <summary>
     /// Ensures a texture work item imports one source PNG and writes a prepacked Wii texture asset.
     /// </summary>
-    [Fact]
-    public void Execute_WhenUsingTextureWorkItem_WritesCookedTextureAssetIntoStagingRoot() {
+    [Theory]
+    [InlineData(16)]
+    [InlineData(32)]
+    [InlineData(64)]
+    public void Execute_WhenUsingTextureWorkItem_WritesCookedTextureAssetIntoStagingRoot(int bits) {
         string workspacePath = Path.Combine(Path.GetTempPath(), "wii-platform-cook-work-item-tests", Guid.NewGuid().ToString("N"));
         string projectRootPath = Path.Combine(workspacePath, "project");
         string stagingRootPath = Path.Combine(workspacePath, "staging");
@@ -40,13 +43,13 @@ public sealed class WiiPlatformCookWorkItemExecutorTests {
                         [new PlatformCookWorkItemMetadata("source-asset-id", "Images/Menu/logo.png")])
                 ],
                 projectRootPath,
-                stagingRootPath);
+                stagingRootPath, new NumericPrecisionPolicy(bits, bits));
 
             string outputPath = Path.Combine(stagingRootPath, "cooked", "imported", "logo-runtime.hasset");
             Assert.True(File.Exists(outputPath));
 
             using FileStream stream = new FileStream(outputPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-            TextureAsset cookedTexture = Assert.IsType<TextureAsset>(FilesAssetSerializer.Deserialize(stream));
+            TextureAsset cookedTexture = Assert.IsType<TextureAsset>(PackagedAssetBinarySerializer.Deserialize(stream, new NumericPrecisionPolicy(bits, bits)));
             Assert.Equal(TextureAssetColorFormat.GxRgb5A3, cookedTexture.ColorFormat);
             Assert.Equal(32, cookedTexture.Colors.Length);
         } finally {
@@ -59,8 +62,11 @@ public sealed class WiiPlatformCookWorkItemExecutorTests {
     /// <summary>
     /// Ensures a font-atlas work item rewrites the serialized font atlas texture into a prepacked Wii payload.
     /// </summary>
-    [Fact]
-    public void Execute_WhenUsingFontAtlasTextureWorkItem_WritesCookedFontAssetIntoStagingRoot() {
+    [Theory]
+    [InlineData(16)]
+    [InlineData(32)]
+    [InlineData(64)]
+    public void Execute_WhenUsingFontAtlasTextureWorkItem_WritesCookedFontAssetIntoStagingRoot(int bits) {
         string workspacePath = Path.Combine(Path.GetTempPath(), "wii-platform-cook-work-item-tests", Guid.NewGuid().ToString("N"));
         string projectRootPath = Path.Combine(workspacePath, "project");
         string stagingRootPath = Path.Combine(workspacePath, "staging");
@@ -88,13 +94,13 @@ public sealed class WiiPlatformCookWorkItemExecutorTests {
                         [new PlatformCookWorkItemMetadata("source-asset-id", "Fonts/Body.hefont")])
                 ],
                 projectRootPath,
-                stagingRootPath);
+                stagingRootPath, new NumericPrecisionPolicy(bits, bits));
 
             string outputPath = Path.Combine(stagingRootPath, "cooked", "fonts", "Body.ps2tex");
             Assert.True(File.Exists(outputPath));
 
             using FileStream stream = new FileStream(outputPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-            TextureAsset cookedTexture = Assert.IsType<TextureAsset>(FilesAssetSerializer.Deserialize(stream));
+            TextureAsset cookedTexture = Assert.IsType<TextureAsset>(PackagedAssetBinarySerializer.Deserialize(stream, new NumericPrecisionPolicy(bits, bits)));
             Assert.Equal(TextureAssetColorFormat.GxRgb5A3, cookedTexture.ColorFormat);
             Assert.Equal(32, cookedTexture.Colors.Length);
         } finally {

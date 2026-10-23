@@ -10,6 +10,20 @@ namespace helengine.wii.builder.tests;
 /// <summary>Checks real texture and atlas cooking plus complete batch preflight before resetting a packaged staging tree.</summary>
 [Collection("WiiTextureStaging")]
 public sealed class WiiNativeTextureWorkItemTests : IDisposable {
+    /// <summary>Loads material bytes with the exact target policy instead of the managed host's policy.</summary>
+    [Theory]
+    [InlineData(16)]
+    [InlineData(32)]
+    [InlineData(64)]
+    public void MaterialPayloadLoadsWithTargetNumericPolicy(int bits) {
+        var policy = new NumericPrecisionPolicy(bits, bits);
+        var request = new PlatformMaterialCookRequest("material", "materials/sample.hasset", "wii", "wii-default", "wii-default",
+            WiiMaterialSchemaIds.StandardTexturedSchemaId, new Dictionary<string, string>(), numericPolicy: policy);
+        var result = new WiiMaterialCooker().Cook(request);
+        using var stream = new MemoryStream(result.CookedMaterialBytes);
+        Assert.IsType<PlatformMaterialAsset>(PackagedAssetBinarySerializer.Deserialize(stream, policy));
+    }
+
     /// <summary>Uses one fixed fixture tree beneath the explicit dotnet artifacts directory.</summary>
     readonly string Root = Path.Combine(AppContext.BaseDirectory, "gx-texture-work-items");
     /// <summary>Retains the caller's repository override while fixtures run from relocated artifacts.</summary>
@@ -141,10 +155,20 @@ public sealed class WiiNativeTextureWorkItemTests : IDisposable {
 
     /// <summary>Checks legacy font externalization retains the selected native atlas from either a work item or an existing manifest artifact.</summary>
     [Theory]
-    [InlineData(0)]
-    [InlineData(1)]
-    [InlineData(2)]
-    public async Task EmbeddedFontExternalizationPreservesExplicitNativeAtlas(int atlasSourceKind) {
+    [InlineData(0, 16)]
+    [InlineData(0, 32)]
+    [InlineData(0, 64)]
+    [InlineData(1, 16)]
+    [InlineData(1, 32)]
+    [InlineData(1, 64)]
+    [InlineData(2, 16)]
+    [InlineData(2, 32)]
+    [InlineData(2, 64)]
+    [InlineData(3, 16)]
+    [InlineData(3, 32)]
+    [InlineData(3, 64)]
+    public async Task EmbeddedFontExternalizationPreservesExplicitNativeAtlas(int atlasSourceKind, int bits) {
+        var policy = new NumericPrecisionPolicy(bits, bits);
         string package = Path.Combine(Root, "package");
         string fontRelative = "cooked/fonts/body.hefont";
         string atlasRelative = "cooked/fonts/body.hetex";
@@ -158,30 +182,31 @@ public sealed class WiiNativeTextureWorkItemTests : IDisposable {
         font.SourceTextureAsset = null;
         byte[] originalFont = File.ReadAllBytes(fontPath);
         byte[] originalTexture = File.ReadAllBytes(Source);
-        var nativeSettings = atlasSourceKind == 2
+        var nativeSettings = atlasSourceKind >= 2
             ? new WiiTextureCookSettings(0, "GxRgb5A3", TextureAssetAlphaPrecision.A8)
             : WiiNativeTextureCookTests.Settings("Gx.CI8.TLUT.RGB5A3", TextureAssetAlphaPrecision.A3);
         List<PlatformBuildArtifact> artifacts = [new(fontRelative, "font", "hash", "font", "wii-default")];
         PlatformCookWorkItem[] items = [];
         byte[] explicitAtlasBytes = null;
-        if (atlasSourceKind != 0) {
+        if (atlasSourceKind == 1 || atlasSourceKind == 2) {
             using TextureAsset atlas = new WiiTextureCooker().CookTexture(raw, nativeSettings);
-            explicitAtlasBytes = FilesAssetSerializer.SerializeToBytes(atlas);
+            explicitAtlasBytes = FilesAssetSerializer.SerializeToBytes(atlas, policy);
             File.WriteAllBytes(Path.Combine(package, atlasRelative), explicitAtlasBytes);
             artifacts.Add(new PlatformBuildArtifact(atlasRelative, "atlas", "hash", "texture", "wii-default"));
-        } else {
+        } else if (atlasSourceKind == 0) {
             items = [new PlatformCookWorkItem("atlas", Source, "font-atlas-texture", "wii", "runtime-texture", atlasRelative, "atlas", "source", "settings", nativeSettings.Serialize(), [])];
         }
         Directory.SetCurrentDirectory(package);
         WiiStopAfterStagingNativeBuildExecutor nativeBoundary = new();
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => new WiiPlatformAssetBuilder(nativeBoundary, null, null).BuildAsync(
-            Request(items, artifacts.ToArray()), new RecordingProgressReporter(), new RecordingDiagnosticReporter(), CancellationToken.None));
+            Request(items, artifacts.ToArray(), policy), new RecordingProgressReporter(), new RecordingDiagnosticReporter(), CancellationToken.None));
         Assert.Equal(WiiStopAfterStagingNativeBuildExecutor.StopMessage, exception.Message);
         Assert.True(nativeBoundary.WasInvoked);
-        using TextureAsset stagedAtlas = Assert.IsType<TextureAsset>(FilesAssetSerializer.DeserializeFromBytes(File.ReadAllBytes(Path.Combine(Stage, atlasRelative))));
-        Assert.Equal(atlasSourceKind == 2 ? TextureAssetColorFormat.GxRgb5A3 : TextureAssetColorFormat.GxNative, stagedAtlas.ColorFormat);
+        using var atlasStream = File.OpenRead(Path.Combine(Stage, atlasRelative));
+        using TextureAsset stagedAtlas = Assert.IsType<TextureAsset>(PackagedAssetBinarySerializer.Deserialize(atlasStream, policy));
+        Assert.Equal(atlasSourceKind >= 2 ? TextureAssetColorFormat.GxRgb5A3 : TextureAssetColorFormat.GxNative, stagedAtlas.ColorFormat);
         Assert.Equal(nativeSettings.AlphaPrecision, stagedAtlas.AlphaPrecision);
-        if (atlasSourceKind != 2) Assert.Equal(nativeSettings.ColorFormatId, GxNativeTextureCodec.ReadLayout(stagedAtlas).Format.Id);
+        if (atlasSourceKind < 2) Assert.Equal(nativeSettings.ColorFormatId, GxNativeTextureCodec.ReadLayout(stagedAtlas).Format.Id);
         if (explicitAtlasBytes != null) Assert.Equal(explicitAtlasBytes, File.ReadAllBytes(Path.Combine(Stage, atlasRelative)));
         using FileStream stagedFontStream = File.OpenRead(Path.Combine(Stage, fontRelative));
         using FontAsset stagedFont = helengine.files.FontAssetBinarySerializer.Deserialize(stagedFontStream);
@@ -199,14 +224,17 @@ public sealed class WiiNativeTextureWorkItemTests : IDisposable {
     }
 
     /// <summary>Creates a packaged build request whose failures occur before the real native executor can run.</summary>
-    PlatformBuildRequest Request(PlatformCookWorkItem[] items, PlatformBuildArtifact[] artifacts) {
+    PlatformBuildRequest Request(PlatformCookWorkItem[] items, PlatformBuildArtifact[] artifacts, NumericPrecisionPolicy numericPolicy = null) {
+        Dictionary<string, string> numericOptions = [];
+        helengine.baseplatform.Definitions.PlatformNumericPolicyResolver.ApplyToOptions(numericPolicy ?? NumericPrecisionPolicy.Default, numericOptions);
         var manifest = new PlatformBuildManifest(3, "project", "1.0.0", "1.0.0", "wii", "1.0.0", "fixture-scene",
             [new PlatformBuildScene("fixture-scene", "Fixture", "fixture.helen", [], [new KeyValuePair<string, string>(PlatformBuildSceneMetadataKeys.CookedRelativePath, "cooked/scenes/fixture.heasset")])],
             [], artifacts, [], [], new PlatformContainerWritePlan("wii-disc-layout", []), items, PlatformBuildRuntimeFeatureManifest.Empty);
         return new PlatformBuildRequest(manifest,
             [new PlatformBuildTargetVariant("wii-default", "wii", "wii", "wii-default")],
             [new PlatformCookProfile("wii-default", "Wii", new PlatformCookProfileCapabilities("wii", "raw", "pcm", "scene", PlatformSerializationEndianness.BigEndian))],
-            Path.Combine(Root, "output"), Path.Combine(Root, "working"), "wii-default", "gx", "default", null, null, null, Path.Combine(Root, "generated-core"));
+            Path.Combine(Root, "output"), Path.Combine(Root, "working"), "wii-default", "gx", "default", null, null,
+            numericOptions, Path.Combine(Root, "generated-core"));
     }
 
     /// <summary>Removes only this test class's contained fixed fixture directory, preserving unrelated outputs.</summary>

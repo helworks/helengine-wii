@@ -60,7 +60,7 @@ public static class WiiBuildWorkspace {
         WritePhaseMarker(phaseMarkerPath, "platform cook work items begin");
         WiiPlatformCookWorkItemExecutor textureExecutor = new();
         IReadOnlyList<WiiTextureCookWorkPlan> texturePlans = textureExecutor.Prepare(
-            request.Manifest.PlatformCookWorkItems ?? [], request.Manifest.CookedArtifacts ?? [], Directory.GetCurrentDirectory(), paths.StagingRootPath, cancellationToken);
+            request.Manifest.PlatformCookWorkItems ?? [], request.Manifest.CookedArtifacts ?? [], Directory.GetCurrentDirectory(), paths.StagingRootPath, cancellationToken, request.NumericPolicy);
         ValidatePackagedArtifactSources(request, paths.StagingRootPath, diagnosticReporter, diagnostics, cancellationToken);
         if (diagnostics.Count > 0) return Task.FromResult(new PlatformBuildReport(false, [.. diagnostics], [.. sceneOutcomes], [.. looseAssetOutcomes]));
         IReadOnlyList<WiiFontAtlasCookWorkPlan> fontPlans = PrepareEmbeddedFontAtlases(request, paths.StagingRootPath, texturePlans, cancellationToken);
@@ -231,9 +231,10 @@ public static class WiiBuildWorkspace {
             if (!explicitAtlases.Contains(physicalAtlas)) {
                 WiiTextureCookPath.Reserve(reserved, atlasRelative);
                 using TextureAsset cooked = CreateCookedAtlasTexture(font.SourceTextureAsset);
-                atlasPayload = FilesAssetSerializer.SerializeToBytes(cooked);
+                atlasPayload = FilesAssetSerializer.SerializeToBytes(cooked, request.NumericPolicy);
             } else if (manifestSources.TryGetValue(physicalAtlas, out string atlasSource)) {
-                using TextureAsset explicitTexture = FilesAssetSerializer.DeserializeFromBytes(File.ReadAllBytes(WiiTextureCookPath.Resolve(Directory.GetCurrentDirectory(), atlasSource))) as TextureAsset
+                using FileStream atlasStream = File.OpenRead(WiiTextureCookPath.Resolve(Directory.GetCurrentDirectory(), atlasSource));
+                using TextureAsset explicitTexture = PackagedAssetBinarySerializer.Deserialize(atlasStream, request.NumericPolicy) as TextureAsset
                     ?? throw new InvalidOperationException("Wii explicit font atlas manifest artifact is not a texture.");
                 if (explicitTexture.ColorFormat == TextureAssetColorFormat.GxRgb5A3) {
                     using TextureAsset validated = new WiiTextureCooker().CookTexture(explicitTexture, new WiiTextureCookSettings(0, "GxRgb5A3", explicitTexture.AlphaPrecision));
