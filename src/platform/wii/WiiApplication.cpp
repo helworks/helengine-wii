@@ -860,7 +860,7 @@ namespace helengine::wii {
 #if HELENGINE_WII_HAS_GENERATED_CORE
         std::string sceneTransitionStage;
         if (EngineCore != nullptr) {
-            sceneTransitionStage = EngineCore->get_LastSceneTransitionStage();
+            sceneTransitionStage = EngineCore->get_LastSceneTransitionStage().raw();
         }
 
         if (EngineRenderManager3D != nullptr) {
@@ -898,15 +898,15 @@ namespace helengine::wii {
             && EngineCore != nullptr
             && EngineCore->get_SceneLoadService() != nullptr
             && RefineSceneLoadFailureCheckpoint(
-                EngineCore->get_SceneLoadService()->get_LastTraceStage(),
-                EngineCore->get_SceneLoadService()->get_LastTraceComponentTypeId())) {
+                EngineCore->get_SceneLoadService()->get_LastTraceStage().raw(),
+                EngineCore->get_SceneLoadService()->get_LastTraceComponentTypeId().raw())) {
             return;
         }
 
         if (sceneTransitionStage.starts_with("SceneManager:")
             && EngineCore != nullptr
             && EngineCore->get_SceneManager() != nullptr
-            && RefineSceneManagerFailureCheckpoint(EngineCore->get_SceneManager()->get_LastTraceStage())) {
+            && RefineSceneManagerFailureCheckpoint(EngineCore->get_SceneManager()->get_LastTraceStage().raw())) {
             return;
         }
 

@@ -50,7 +50,7 @@ namespace helengine::wii {
         RuntimeTexture* BuildTextureFromRaw(TextureAsset* data) override;
 
         /// Rebuilds one platform-owned cooked texture payload into a Wii-native runtime texture.
-        RuntimeTexture* BuildTextureFromCooked(std::string cookedAssetPath, IContentStreamSource* contentStreamSource) override;
+        RuntimeTexture* BuildTextureFromCooked(HeCppString cookedAssetPath, IContentStreamSource* contentStreamSource) override;
 
         /// Releases one Wii runtime texture.
         void ReleaseTexture(RuntimeTexture* texture) override;
@@ -124,7 +124,7 @@ namespace helengine::wii {
         void ConfigureSolidColorPipeline(uint16_t logicalFrameWidth, uint16_t logicalFrameHeight, uint16_t physicalFrameWidth, uint16_t physicalFrameHeight);
 
         /// Emits one solid screen-space quad in pixel coordinates for minimal runtime capture diagnostics.
-        void DrawSolidQuad2D(float x, float y, float width, float height, byte4 color);
+        void DrawSolidQuad2D(RealEvaluation x, RealEvaluation y, RealEvaluation width, RealEvaluation height, byte4 color);
 
         /// Configures the native GX state used by the Wii text overlay pass.
         void ConfigureTextPipeline(uint16_t logicalFrameWidth, uint16_t logicalFrameHeight, uint16_t physicalFrameWidth, uint16_t physicalFrameHeight);
@@ -133,7 +133,7 @@ namespace helengine::wii {
         static void ReleaseTransientTextureAsset(TextureAsset* asset);
 
         /// Emits a rotated textured quad at its transformed world origin; glyph callers supply a zero angle.
-        void DrawTexturedQuad2D(float x, float y, float width, float height, float rotationRadians, const float4& sourceRect, byte4 color, WiiRuntimeTexture* texture);
+        void DrawTexturedQuad2D(RealEvaluation x, RealEvaluation y, RealEvaluation width, RealEvaluation height, RealEvaluation rotationRadians, const float4& sourceRect, byte4 color, WiiRuntimeTexture* texture);
 
         /// Submits the exact resolved corners without reconstructing an angle or scale.
         void DrawTexturedQuad2D(const SpriteQuad2D& quad, const float4& sourceRect, byte4 color, WiiRuntimeTexture* texture);

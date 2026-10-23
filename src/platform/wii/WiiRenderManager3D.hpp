@@ -37,16 +37,16 @@ namespace helengine::wii {
         ~WiiRenderManager3D() override;
 
         /// Rebuilds one legacy raw material asset path through the cooked platform-owned Wii material contract.
-        RuntimeMaterial* BuildMaterialFromRawAsset(ContentManager* assetContentManager, std::string materialAssetPath) override;
+        RuntimeMaterial* BuildMaterialFromRawAsset(ContentManager* assetContentManager, HeCppString materialAssetPath) override;
 
         /// Builds a Wii runtime model that keeps authored submesh and geometry arrays alive.
         RuntimeModel* BuildModelFromRaw(ModelAsset* data) override;
 
         /// Builds a Wii runtime model from one serialized cooked model asset path.
-        RuntimeModel* BuildModelFromCooked(std::string cookedAssetPath, IContentStreamSource* contentStreamSource) override;
+        RuntimeModel* BuildModelFromCooked(HeCppString cookedAssetPath, IContentStreamSource* contentStreamSource) override;
 
         /// Rebuilds one cooked platform-owned material payload path into the shared runtime material contract used by generated scenes.
-        RuntimeMaterial* BuildMaterialFromCooked(std::string cookedAssetPath, IContentStreamSource* contentStreamSource);
+        RuntimeMaterial* BuildMaterialFromCooked(HeCppString cookedAssetPath, IContentStreamSource* contentStreamSource);
 
         /// Rebuilds one cooked platform-owned material payload into the minimal runtime contract currently consumed by generated scenes.
         RuntimeMaterial* BuildMaterialFromCooked(PlatformMaterialAsset* materialAsset);
@@ -134,16 +134,16 @@ namespace helengine::wii {
         static GXColor ToGxColor(float4 color);
 
         /// Converts one normalized engine color channel into the byte GX range expected by the Wii renderer.
-        static uint8_t ConvertNormalizedColorChannel(float value);
+        static uint8_t ConvertNormalizedColorChannel(RealEvaluation value);
 
         /// Rebuilds one material render-state instance from the cooked Wii material payload flags.
         static MaterialRenderState* BuildMaterialRenderState(PlatformMaterialAsset* materialAsset);
 
         /// Resolves one packaged content-relative asset path against the absolute cooked material path that referenced it.
-        std::string ResolvePackagedContentAssetPath(const std::string& cookedMaterialAssetPath, const std::string& contentRelativePath);
+        HeCppString ResolvePackagedContentAssetPath(const HeCppString& cookedMaterialAssetPath, const HeCppString& contentRelativePath);
 
         /// Loads and attaches one cooked diffuse texture when the path-based Wii cooked-material contract references one.
-        void AttachCookedDiffuseTexture(WiiRuntimeMaterial* runtimeMaterial, PlatformMaterialAsset* materialAsset, const std::string& cookedMaterialAssetPath, IContentStreamSource* contentStreamSource);
+        void AttachCookedDiffuseTexture(WiiRuntimeMaterial* runtimeMaterial, PlatformMaterialAsset* materialAsset, const HeCppString& cookedMaterialAssetPath, IContentStreamSource* contentStreamSource);
 
         /// Releases one transient cooked/raw model asset after the shared runtime model has been rebuilt.
         static void ReleaseTransientModelAsset(ModelAsset* asset);

@@ -68,7 +68,7 @@ namespace helengine::wii {
     }
 
     /// Rebuilds one legacy raw material asset path through the cooked platform-owned Wii material contract.
-    RuntimeMaterial* WiiRenderManager3D::BuildMaterialFromRawAsset(ContentManager* assetContentManager, std::string materialAssetPath) {
+    RuntimeMaterial* WiiRenderManager3D::BuildMaterialFromRawAsset(ContentManager* assetContentManager, HeCppString materialAssetPath) {
         if (assetContentManager == nullptr) {
             throw new ArgumentNullException("assetContentManager");
         }
@@ -108,7 +108,7 @@ namespace helengine::wii {
     }
 
     /// Builds a Wii runtime model from one serialized cooked model asset path.
-    RuntimeModel* WiiRenderManager3D::BuildModelFromCooked(std::string cookedAssetPath, IContentStreamSource* contentStreamSource) {
+    RuntimeModel* WiiRenderManager3D::BuildModelFromCooked(HeCppString cookedAssetPath, IContentStreamSource* contentStreamSource) {
         if (cookedAssetPath.empty()) {
             throw new ArgumentException("Wii cooked model path is required.", "cookedAssetPath");
         } else if (contentStreamSource == nullptr) {
@@ -142,7 +142,7 @@ namespace helengine::wii {
     }
 
     /// Rebuilds one cooked platform-owned material payload path into the shared runtime material contract used by generated scenes.
-    RuntimeMaterial* WiiRenderManager3D::BuildMaterialFromCooked(std::string cookedAssetPath, IContentStreamSource* contentStreamSource) {
+    RuntimeMaterial* WiiRenderManager3D::BuildMaterialFromCooked(HeCppString cookedAssetPath, IContentStreamSource* contentStreamSource) {
         if (cookedAssetPath.empty()) {
             throw new ArgumentException("Wii cooked material path is required.", "cookedAssetPath");
         } else if (contentStreamSource == nullptr) {
@@ -187,7 +187,7 @@ namespace helengine::wii {
             static_cast<float>(materialAsset->BaseColorR) / 255.0f,
             static_cast<float>(materialAsset->BaseColorG) / 255.0f,
             static_cast<float>(materialAsset->BaseColorB) / 255.0f));
-        runtimeMaterial->SetTextureRelativePath(materialAsset->TextureRelativePath);
+        runtimeMaterial->SetTextureRelativePath(materialAsset->TextureRelativePath.raw());
         runtimeMaterial->set_SupportsNormalMapping(false);
         runtimeMaterial->set_SupportsEmissive(false);
         runtimeMaterial->set_CastsShadows(materialAsset->Lit);
@@ -421,9 +421,9 @@ namespace helengine::wii {
     }
 
     /// Converts one normalized engine color channel into the byte GX range expected by the Wii renderer.
-    uint8_t WiiRenderManager3D::ConvertNormalizedColorChannel(float value) {
-        const double clampedValue = std::clamp(static_cast<double>(value), 0.0, 1.0);
-        return static_cast<uint8_t>((clampedValue * 255.0) + 0.5);
+    uint8_t WiiRenderManager3D::ConvertNormalizedColorChannel(RealEvaluation value) {
+        const RealEvaluation clampedValue = RealMath::Clamp(value, 0.0f, 1.0f);
+        return static_cast<uint8_t>(static_cast<int32_t>((clampedValue * 255.0f) + 0.5f));
     }
 
     /// Rebuilds one material render-state instance from the cooked Wii material payload flags.
@@ -445,26 +445,26 @@ namespace helengine::wii {
     }
 
     /// Resolves one packaged content-relative asset path against the absolute cooked material path that referenced it.
-    std::string WiiRenderManager3D::ResolvePackagedContentAssetPath(const std::string& cookedMaterialAssetPath, const std::string& contentRelativePath) {
+    HeCppString WiiRenderManager3D::ResolvePackagedContentAssetPath(const HeCppString& cookedMaterialAssetPath, const HeCppString& contentRelativePath) {
         if (cookedMaterialAssetPath.empty()) {
             throw new ArgumentException("Wii cooked material path is required.", "cookedMaterialAssetPath");
         } else if (contentRelativePath.empty()) {
             throw new ArgumentException("Wii content-relative asset path is required.", "contentRelativePath");
         }
 
-        std::string normalizedMaterialAssetPath = cookedMaterialAssetPath;
+        HeCppString normalizedMaterialAssetPath = cookedMaterialAssetPath;
         std::replace(normalizedMaterialAssetPath.begin(), normalizedMaterialAssetPath.end(), '\\', '/');
         const std::size_t cookedMarkerIndex = normalizedMaterialAssetPath.find("cooked/");
         if (cookedMarkerIndex == std::string::npos) {
             throw new InvalidOperationException("Wii cooked material path must contain the packaged 'cooked/' root segment.");
         }
 
-        const std::string contentRootPath = cookedMaterialAssetPath.substr(0, cookedMarkerIndex);
+        const HeCppString contentRootPath = cookedMaterialAssetPath.substr(0, cookedMarkerIndex);
         return Path::GetFullPath(Path::Combine(contentRootPath, contentRelativePath));
     }
 
     /// Loads and attaches one cooked diffuse texture when the path-based Wii cooked-material contract references one.
-    void WiiRenderManager3D::AttachCookedDiffuseTexture(WiiRuntimeMaterial* runtimeMaterial, PlatformMaterialAsset* materialAsset, const std::string& cookedMaterialAssetPath, IContentStreamSource* contentStreamSource) {
+    void WiiRenderManager3D::AttachCookedDiffuseTexture(WiiRuntimeMaterial* runtimeMaterial, PlatformMaterialAsset* materialAsset, const HeCppString& cookedMaterialAssetPath, IContentStreamSource* contentStreamSource) {
         if (runtimeMaterial == nullptr) {
             throw new ArgumentNullException("runtimeMaterial");
         } else if (materialAsset == nullptr) {
@@ -479,7 +479,7 @@ namespace helengine::wii {
             return;
         }
 
-        const std::string cookedTextureAssetPath = ResolvePackagedContentAssetPath(cookedMaterialAssetPath, materialAsset->TextureRelativePath);
+        const HeCppString cookedTextureAssetPath = ResolvePackagedContentAssetPath(cookedMaterialAssetPath, materialAsset->TextureRelativePath);
         Stream* textureStream = contentStreamSource->OpenRead(cookedTextureAssetPath);
         try {
             Asset* textureAssetPayload = AssetSerializer::Deserialize(textureStream);

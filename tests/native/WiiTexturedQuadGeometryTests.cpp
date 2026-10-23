@@ -12,6 +12,17 @@ static void AssertNear(double actual, double expected) {
 int main() {
     using helengine::wii::WiiTexturedQuadGeometry;
     const double halfPi = std::acos(-1.0) / 2.0;
+#if HELENGINE_WII_HAS_GENERATED_CORE
+    // The real generated scalar ABI must reach the same authored corners without an implicit float/double conversion.
+    const auto managed = WiiTexturedQuadGeometry::CreateManaged(RealEvaluation(10), RealEvaluation(20),
+        RealEvaluation(100), RealEvaluation(50), RealEvaluation(0));
+    const double managedGolden[] = {10, 20, 110, 20, 110, 70, 10, 70};
+    for (std::size_t index = 0; index < 8; ++index) { AssertNear(managed[index].ToDouble(), managedGolden[index]); }
+    const auto managedRotation = WiiTexturedQuadGeometry::CreateManaged(RealEvaluation(10), RealEvaluation(20),
+        RealEvaluation(100), RealEvaluation(50), RealEvaluation(halfPi));
+    assert(std::abs(managedRotation[6].ToDouble() + 40) < 0.0001);
+    assert(std::abs(managedRotation[7].ToDouble() - 20) < 0.0001);
+#endif
     const auto zero = WiiTexturedQuadGeometry::Create(10, 20, 100, 50, 0);
     const double zeroGolden[] = {10, 20, 110, 20, 110, 70, 10, 70};
     const auto clockwise = WiiTexturedQuadGeometry::Create(10, 20, 100, 50, halfPi);

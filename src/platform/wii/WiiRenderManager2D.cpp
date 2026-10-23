@@ -77,7 +77,7 @@ namespace helengine::wii {
     }
 
     /// Rebuilds one platform-owned cooked texture payload into a Wii-native runtime texture.
-    RuntimeTexture* WiiRenderManager2D::BuildTextureFromCooked(std::string cookedAssetPath, IContentStreamSource* contentStreamSource) {
+    RuntimeTexture* WiiRenderManager2D::BuildTextureFromCooked(HeCppString cookedAssetPath, IContentStreamSource* contentStreamSource) {
         if (cookedAssetPath.empty()) {
             throw new ArgumentException("Wii cooked texture path is required.", "cookedAssetPath");
         } else if (contentStreamSource == nullptr) {
@@ -391,8 +391,8 @@ namespace helengine::wii {
             return;
         }
 
-        float radius = commandList->GetRoundedRectRadius(payloadIndex);
-        float borderThickness = std::max(0.0f, commandList->GetRoundedRectBorderThickness(payloadIndex));
+        RealEvaluation radius = commandList->GetRoundedRectRadius(payloadIndex);
+        RealEvaluation borderThickness = RealMath::Max(0.0f, commandList->GetRoundedRectBorderThickness(payloadIndex));
         RoundedRectCorners corners = commandList->GetRoundedRectCorners(payloadIndex);
         byte4 fillColor = commandList->GetRoundedRectFillColor(payloadIndex);
         byte4 borderColor = commandList->GetRoundedRectBorderColor(payloadIndex);
@@ -405,9 +405,9 @@ namespace helengine::wii {
             DrawSolidQuad2D(bounds.X, bounds.Y, bounds.Z, bounds.W, borderColor);
         }
 
-        float inset = std::min(borderThickness, std::min(bounds.Z * 0.5f, bounds.W * 0.5f));
-        float innerWidth = bounds.Z - (inset * 2.0f);
-        float innerHeight = bounds.W - (inset * 2.0f);
+        RealEvaluation inset = RealMath::Min(borderThickness, RealMath::Min(bounds.Z * 0.5f, bounds.W * 0.5f));
+        RealEvaluation innerWidth = bounds.Z - (inset * 2.0f);
+        RealEvaluation innerHeight = bounds.W - (inset * 2.0f);
         if (fillColor.W > 0U && innerWidth > 0.0f && innerHeight > 0.0f) {
             DrawSolidQuad2D(bounds.X + inset, bounds.Y + inset, innerWidth, innerHeight, fillColor);
         }
@@ -415,21 +415,21 @@ namespace helengine::wii {
 
     /// Applies one clip rectangle from the shared 2D command list to the active GX scissor state.
     void WiiRenderManager2D::ApplyClipRect(const float4& clipRect, uint16_t logicalFrameWidth, uint16_t logicalFrameHeight, uint16_t physicalFrameWidth, uint16_t physicalFrameHeight) {
-        const float horizontalScale = static_cast<float>(physicalFrameWidth) / static_cast<float>(logicalFrameWidth);
-        const float verticalScale = static_cast<float>(physicalFrameHeight) / static_cast<float>(logicalFrameHeight);
-        float left = std::max(0.0f, clipRect.X);
-        float top = std::max(0.0f, clipRect.Y);
-        float right = std::min(static_cast<float>(logicalFrameWidth), clipRect.X + std::max(0.0f, clipRect.Z));
-        float bottom = std::min(static_cast<float>(logicalFrameHeight), clipRect.Y + std::max(0.0f, clipRect.W));
+        const RealEvaluation horizontalScale = RealEvaluation(physicalFrameWidth) / RealEvaluation(logicalFrameWidth);
+        const RealEvaluation verticalScale = RealEvaluation(physicalFrameHeight) / RealEvaluation(logicalFrameHeight);
+        RealEvaluation left = RealMath::Max(0.0f, clipRect.X);
+        RealEvaluation top = RealMath::Max(0.0f, clipRect.Y);
+        RealEvaluation right = RealMath::Min(RealEvaluation(logicalFrameWidth), clipRect.X + RealMath::Max(0.0f, clipRect.Z));
+        RealEvaluation bottom = RealMath::Min(RealEvaluation(logicalFrameHeight), clipRect.Y + RealMath::Max(0.0f, clipRect.W));
         if (right <= left || bottom <= top) {
             GX_SetScissor(0U, 0U, 0U, 0U);
             return;
         }
 
-        uint32_t x = static_cast<uint32_t>(std::floor(left * horizontalScale));
-        uint32_t y = static_cast<uint32_t>(std::floor(top * verticalScale));
-        uint32_t width = static_cast<uint32_t>(std::ceil(right * horizontalScale) - std::floor(left * horizontalScale));
-        uint32_t height = static_cast<uint32_t>(std::ceil(bottom * verticalScale) - std::floor(top * verticalScale));
+        uint32_t x = static_cast<uint32_t>(static_cast<int32_t>(RealMath::Floor(left * horizontalScale)));
+        uint32_t y = static_cast<uint32_t>(static_cast<int32_t>(RealMath::Floor(top * verticalScale)));
+        uint32_t width = static_cast<uint32_t>(static_cast<int32_t>(RealMath::Ceiling(right * horizontalScale) - RealMath::Floor(left * horizontalScale)));
+        uint32_t height = static_cast<uint32_t>(static_cast<int32_t>(RealMath::Ceiling(bottom * verticalScale) - RealMath::Floor(top * verticalScale)));
         GX_SetScissor(x, y, width, height);
     }
 
@@ -522,15 +522,15 @@ namespace helengine::wii {
     }
 
     /// Emits one solid screen-space quad in pixel coordinates for minimal runtime capture diagnostics.
-    void WiiRenderManager2D::DrawSolidQuad2D(float x, float y, float width, float height, byte4 color) {
+    void WiiRenderManager2D::DrawSolidQuad2D(RealEvaluation x, RealEvaluation y, RealEvaluation width, RealEvaluation height, byte4 color) {
         GX_Begin(GX_QUADS, GX_VTXFMT0, 4);
-        GX_Position3f32(x, y, 0.0f);
+        GX_Position3f32(static_cast<float>(x), static_cast<float>(y), 0.0f);
         GX_Color4u8(color.X, color.Y, color.Z, color.W);
-        GX_Position3f32(x + width, y, 0.0f);
+        GX_Position3f32(static_cast<float>(x + width), static_cast<float>(y), 0.0f);
         GX_Color4u8(color.X, color.Y, color.Z, color.W);
-        GX_Position3f32(x + width, y + height, 0.0f);
+        GX_Position3f32(static_cast<float>(x + width), static_cast<float>(y + height), 0.0f);
         GX_Color4u8(color.X, color.Y, color.Z, color.W);
-        GX_Position3f32(x, y + height, 0.0f);
+        GX_Position3f32(static_cast<float>(x), static_cast<float>(y + height), 0.0f);
         GX_Color4u8(color.X, color.Y, color.Z, color.W);
         GX_End();
     }
@@ -570,8 +570,8 @@ namespace helengine::wii {
     }
 
     /// Keeps the existing rectangle path for unrotated glyphs.
-    void WiiRenderManager2D::DrawTexturedQuad2D(float x, float y, float width, float height, float rotationRadians, const float4& sourceRect, byte4 color, WiiRuntimeTexture* texture) {
-        const std::array<double, 8> corners = WiiTexturedQuadGeometry::Create(x, y, width, height, rotationRadians);
+    void WiiRenderManager2D::DrawTexturedQuad2D(RealEvaluation x, RealEvaluation y, RealEvaluation width, RealEvaluation height, RealEvaluation rotationRadians, const float4& sourceRect, byte4 color, WiiRuntimeTexture* texture) {
+        const std::array<RealEvaluation, 8> corners = WiiTexturedQuadGeometry::CreateManaged(x, y, width, height, rotationRadians);
         SpriteQuad2D quad;
         quad.TopLeft = float2(corners[0], corners[1]);
         quad.TopRight = float2(corners[2], corners[3]);
@@ -597,18 +597,18 @@ namespace helengine::wii {
         GX_InitTexObjWrapMode(texture->GetNativeTextureObject(), GX_CLAMP, GX_CLAMP);
         texture->BindNativeTexture(GX_TEXMAP0);
         GX_Begin(GX_QUADS, GX_VTXFMT0, 4);
-        GX_Position3f32(quad.TopLeft.X, quad.TopLeft.Y, 0.0f);
+        GX_Position3f32(static_cast<float>(quad.TopLeft.X), static_cast<float>(quad.TopLeft.Y), 0.0f);
         GX_Color4u8(color.X, color.Y, color.Z, color.W);
-        GX_TexCoord2f32(nativeSourceRect.X, nativeSourceRect.Y);
-        GX_Position3f32(quad.TopRight.X, quad.TopRight.Y, 0.0f);
+        GX_TexCoord2f32(static_cast<float>(nativeSourceRect.X), static_cast<float>(nativeSourceRect.Y));
+        GX_Position3f32(static_cast<float>(quad.TopRight.X), static_cast<float>(quad.TopRight.Y), 0.0f);
         GX_Color4u8(color.X, color.Y, color.Z, color.W);
-        GX_TexCoord2f32(nativeSourceRect.X + nativeSourceRect.Z, nativeSourceRect.Y);
-        GX_Position3f32(quad.BottomRight.X, quad.BottomRight.Y, 0.0f);
+        GX_TexCoord2f32(static_cast<float>(nativeSourceRect.X + nativeSourceRect.Z), static_cast<float>(nativeSourceRect.Y));
+        GX_Position3f32(static_cast<float>(quad.BottomRight.X), static_cast<float>(quad.BottomRight.Y), 0.0f);
         GX_Color4u8(color.X, color.Y, color.Z, color.W);
-        GX_TexCoord2f32(nativeSourceRect.X + nativeSourceRect.Z, nativeSourceRect.Y + nativeSourceRect.W);
-        GX_Position3f32(quad.BottomLeft.X, quad.BottomLeft.Y, 0.0f);
+        GX_TexCoord2f32(static_cast<float>(nativeSourceRect.X + nativeSourceRect.Z), static_cast<float>(nativeSourceRect.Y + nativeSourceRect.W));
+        GX_Position3f32(static_cast<float>(quad.BottomLeft.X), static_cast<float>(quad.BottomLeft.Y), 0.0f);
         GX_Color4u8(color.X, color.Y, color.Z, color.W);
-        GX_TexCoord2f32(nativeSourceRect.X, nativeSourceRect.Y + nativeSourceRect.W);
+        GX_TexCoord2f32(static_cast<float>(nativeSourceRect.X), static_cast<float>(nativeSourceRect.Y + nativeSourceRect.W));
         GX_End();
     }
 }
