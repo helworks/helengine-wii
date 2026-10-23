@@ -1,5 +1,7 @@
 #pragma once
 
+struct RealEvaluation;
+
 #include <cstdint>
 #include <vector>
 
