@@ -22,17 +22,17 @@ namespace helengine::wii {
 
     /// Returns the staged direct-DOL content root and fails if the required authored content bundle has not been prepared.
     std::string WiiSceneBootstrap::GetValidatedContentRootPath() {
-        const std::string relativeRootPath = Path::GetFullPath("tmp/city-demo-disc-main-menu-content");
+        const std::string relativeRootPath = Path::GetFullPath("tmp/city-demo-disc-main-menu-content").raw();
         if (HasRequiredFiles(relativeRootPath)) {
             return relativeRootPath;
         }
 
-        const std::string windowsHostRootPath = Path::GetFullPath("C:/dev/helworks/helengine-wii/tmp/city-demo-disc-main-menu-content");
+        const std::string windowsHostRootPath = Path::GetFullPath("C:/dev/helworks/helengine-wii/tmp/city-demo-disc-main-menu-content").raw();
         if (HasRequiredFiles(windowsHostRootPath)) {
             return windowsHostRootPath;
         }
 
-        const std::string wslRootPath = Path::GetFullPath("/mnt/c/dev/helworks/helengine-wii/tmp/city-demo-disc-main-menu-content");
+        const std::string wslRootPath = Path::GetFullPath("/mnt/c/dev/helworks/helengine-wii/tmp/city-demo-disc-main-menu-content").raw();
         if (HasRequiredFiles(wslRootPath)) {
             return wslRootPath;
         }
@@ -134,7 +134,7 @@ namespace helengine::wii {
 
     /// Verifies that one required staged authored-scene file exists under the direct-DOL bundle root.
     void WiiSceneBootstrap::ValidateRequiredFile(std::string rootPath, std::string relativePath) {
-        const std::string fullPath = Path::GetFullPath(Path::Combine(rootPath, relativePath));
+        const std::string fullPath = Path::GetFullPath(Path::Combine(rootPath, relativePath)).raw();
         if (!File::Exists(fullPath)) {
             throw new InvalidOperationException(std::string("Required staged Wii content file is missing: ") + fullPath);
         }
