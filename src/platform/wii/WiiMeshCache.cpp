@@ -58,9 +58,9 @@ namespace helengine::wii {
         for (int32_t positionIndex = 0; positionIndex < runtimeModel->Positions->Length; positionIndex++) {
             const float3 position = (*runtimeModel->Positions)[positionIndex];
             (*cachedMeshData->PackedPositions)[positionIndex] = WiiPackedPosition3 {
-                position.X,
-                position.Y,
-                position.Z
+                static_cast<float>(RealEvaluation(position.X)),
+                static_cast<float>(RealEvaluation(position.Y)),
+                static_cast<float>(RealEvaluation(position.Z))
             };
         }
 
@@ -73,9 +73,9 @@ namespace helengine::wii {
             for (int32_t normalIndex = 0; normalIndex < runtimeModel->Normals->Length; normalIndex++) {
                 const float3 normal = (*runtimeModel->Normals)[normalIndex];
                 (*cachedMeshData->PackedNormals)[normalIndex] = WiiPackedNormal3 {
-                    normal.X,
-                    normal.Y,
-                    normal.Z
+                    static_cast<float>(RealEvaluation(normal.X)),
+                    static_cast<float>(RealEvaluation(normal.Y)),
+                    static_cast<float>(RealEvaluation(normal.Z))
                 };
             }
 
@@ -92,8 +92,8 @@ namespace helengine::wii {
             for (int32_t texCoordIndex = 0; texCoordIndex < runtimeModel->TexCoords->Length; texCoordIndex++) {
                 const float2 texCoord = (*runtimeModel->TexCoords)[texCoordIndex];
                 (*cachedMeshData->PackedTexCoords)[texCoordIndex] = WiiPackedTexCoord2 {
-                    texCoord.X,
-                    texCoord.Y
+                    static_cast<float>(RealEvaluation(texCoord.X)),
+                    static_cast<float>(RealEvaluation(texCoord.Y))
                 };
             }
 
